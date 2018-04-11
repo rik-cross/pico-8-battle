@@ -132,7 +132,7 @@ function _init()
   int      = int(),
   sprite   = 2,
   controls = controls({ p = 1 }),
-  cam      = camera({ bg = 4 , x = 60 }),
+  cam      = camera({ bg = 4 , x = 64 }),
  }))
 end
 
