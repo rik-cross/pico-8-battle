@@ -1,115 +1,171 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+local btns = {
+  l = 0,
+  r = 1,
+  u = 2,
+  d = 3,
+}
+local world={}
+
+local function entity(props)
+  local ent   = {}
+  local props = props or {}
+
+  ent.pos      = props.pos
+  ent.int      = props.int
+  ent.sprite   = props.sprite
+  ent.controls = props.controls
+  ent.cam      = props.cam
+
+  ent.has = function(key)
+    return ent[key] ~= nil
+  end
+
+  return ent
+end
+
+local function camera(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.bg = props.bg or 3
+  obj.x  = props.x  or 0
+  obj.y  = props.y  or 0
+  obj.w  = props.w  or 8
+  obj.h  = props.h  or 12
+
+  return obj
+end
+
+local function controls(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.l = props.l or btns.l 
+  obj.r = props.r or btns.r
+  obj.u = props.u or btns.u 
+  obj.d = props.d or btns.d
+  obj.p = props.p or 0 
+
+  obj.update = function(e)
+    e.int.l = btn(obj.l, obj.p)
+    e.int.r = btn(obj.r, obj.p)
+    e.int.u = btn(obj.u, obj.p)
+    e.int.d = btn(obj.d, obj.p)
+  end
+
+  return obj
+end
+
+local function int()
+  local obj = {}
+
+  obj.l = false
+  obj.r = false
+  obj.u = false
+  obj.d = false
+  obj.s = false
+
+  return obj
+end
+
+local function pos(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.x = props.x or 10
+  obj.y = props.y or 10
+  
+  obj.update = function(e)
+    local x_new = obj.x
+    local y_new = obj.y
+
+    -- if entity wants to move up
+    if (e.int.u) then
+      y_new = obj.y - 1
+      e.int.u = false
+    end
+
+    -- if entity wants to move down
+    if (e.int.d) then
+      y_new = obj.y + 1
+      e.int.d = false
+    end
+
+    -- if entity wants to move up
+    if (e.int.l) then
+      x_new = obj.x - 1
+      e.int.l = false
+    end
+
+    -- if entity wants to move up
+    if (e.int.r) then
+      x_new = obj.x + 1
+      e.int.r = false
+    end
+
+    -- do a hittest here
+
+    -- update position
+    obj.x = x_new
+    obj.y = y_new
+  end
+
+  return obj
+end
+
 function _init()
-
- world={}
-
  -- p1 entity
- add(world, {
-  -- position component
-  pos={x=10,y=10},
-  -- intention component
-  int={u=false,d=false,l=false,r=false,s=false},
-  -- graphics component
-  sprite=1,
-  -- controls component
-  controls={u=2,d=3,l=0,r=1},
-  -- camera component
-  cam={bg=3,x=0,y=0,w=8,h=12},
+ add(world, entity({
+  pos      = pos(),
+  int      = int(),
+  sprite   = 1,
+  controls = controls({ p = 0 }),
+  cam      = camera(),
   -- battle component
   bat={lives=2,health=100,maxhealth=100},
   -- weapon component
-  wea={damage=25,rate=10,speed=2}
- })
+  wea={damage=25,rate=10,speed=2},
+ }))
  
  -- p2 entity
- add(world, {
-  -- position component
-  pos={x=10,y=50},
-  -- intention component
-  int={u=false,d=false,l=false,r=false,s=false},
-  -- graphics component
-  sprite=2,
-  -- controls component
-  controls={u=12,d=13,l=14,r=14},
-  -- camera component
-  cam={bg=4,x=64,y=0,w=8,h=12},
+ add(world, entity({
+  pos      = pos({ y = 50 }),
+  int      = int(),
+  sprite   = 2,
+  controls = controls({ p = 1 }),
+  cam      = camera({ bg = 4 , x = 64 }),
   -- battle component
   bat={lives=2,health=100,maxhealth=100},
   -- weapon component
   wea={damage=25,rate=10,speed=2}
- })
-
+ }))
 end
 
 function _update()
-
- -- control system
  for e in all(world) do
-  if e["controls"] and e["pos"] then
-   
-   if (btn(e.controls.u)) e.int.u = true
-   if (btn(e.controls.d)) e.int.d = true
-   if (btn(e.controls.l)) e.int.l = true
-   if (btn(e.controls.r)) e.int.r = true
-   
+  -- control system
+  if e.has('controls') and e.has('pos') then
+   e.controls.update(e)   
+  end
+
+  -- physics system
+  if e.has('pos') then
+   e.pos.update(e)
   end
  end
-
- -- physics system
- for e in all(world) do
-  if e["pos"] then
-  
-   local x_new = e.pos.x
-   local y_new = e.pos.y
-  
-   -- if entity wants to move up
-   if (e.int.u) then
-    y_new = e.pos.y - 1
-    e.int.u = false
-   end
-   
-   -- if entity wants to move down
-   if (e.int.d) then
-    y_new = e.pos.y + 1
-    e.int.d = false
-   end
-   
-   -- if entity wants to move up
-   if (e.int.l) then
-    x_new = e.pos.x - 1
-    e.int.l = false
-   end
-   
-   -- if entity wants to move up
-   if (e.int.r) then
-    x_new = e.pos.x + 1
-    e.int.r = false
-   end
-   
-   -- do a hittest here
-   
-   -- update position
-   e.pos.x = x_new
-   e.pos.y = y_new
-  
-  end
- end
-
 end
 
 function _draw()
-
  cls()
- 
  rectfill(0, 0, 127, 127, 1)
  
  -- graphics system
  for z in all(world) do
-  if z["cam"] then
-  
-   rectfill(z.cam.x*8,z.cam.y*8,z.cam.w*8,z.cam.h*8,z.cam.bg)
+  if z.has('cam') then
+   rectfill(z.cam.x * 8, z.cam.y * 8, z.cam.w * 8, z.cam.h * 8, z.cam.bg)
   
    local map_x = z.cam.x + (z.cam.w*8)/2 - z.pos.x - 4
    local map_y = z.cam.y + (z.cam.h*8)/2 - z.pos.y - 4
@@ -127,7 +183,6 @@ function _draw()
    end
  
    clip()
- 
   end
  end
  
