@@ -181,11 +181,28 @@ local function pos(props)
       e.int.r = false
     end
 
-    -- do a hittest here
+    -- map hittest 
+    
+    local hit = false
+    
+    local x1=x_new/8
+    local y1=y_new/8
+    local x2=(x_new+7)/8
+    local y2=(y_new+7)/8
+    local a=fget(mget(x1,y1),0)
+    local b=fget(mget(x1,y2),0)
+    local c=fget(mget(x2,y2),0)
+    local d=fget(mget(x2,y1),0)
+    
+    if a or b or c or d then
+     hit = true
+    end
 
     -- update position
-    obj.x = x_new
-    obj.y = y_new
+    if hit == false then
+     obj.x = x_new
+     obj.y = y_new
+    end
   end
 
   return obj
