@@ -18,9 +18,24 @@ local function entity(props)
   ent.sprite   = props.sprite
   ent.controls = props.controls
   ent.cam      = props.cam
+  ent.battle   = props.battle
 
   ent.has = function(key)
     return ent[key] ~= nil
+  end
+
+  ent.update = function(w)
+
+    -- control system
+    if ent.has('controls') and ent.has('pos') and ent.has('int') then
+     ent.controls.update(ent)
+    end
+
+    -- physics system
+    if ent.has('pos') and ent.has('int') then
+     ent.pos.update(ent,w)
+    end
+
   end
 
   return ent
@@ -36,6 +51,31 @@ local function camera(props)
   obj.w  = props.w  or 8
   obj.h  = props.h  or 12
 
+  obj.update = function(e,w)
+    rectfill(e.cam.x * 8, e.cam.y * 8, e.cam.w * 8, e.cam.h * 8, e.cam.bg)
+
+    local map_x = e.cam.x + (e.cam.w*8)/2 - e.pos.x - 4
+    local map_y = e.cam.y + (e.cam.h*8)/2 - e.pos.y - 4
+
+    clip(e.cam.x,e.cam.y,e.cam.w*8,e.cam.h*8)
+
+    map(0,0,map_x,map_y)
+
+    for o in all(w) do
+     if o["pos"] and o["sprite"] then
+       spr(o.sprite,o.pos.x + map_x,o.pos.y + map_y)
+     end
+    end
+
+    clip()
+
+    if e.has('battle') then
+      print('lives: ' .. e.battle.lives,obj.x+10,(obj.y*8)+(obj.h*8)+5,obj.bg)
+      print('health: ' .. e.battle.health,obj.x+10,(obj.y*8)+(obj.h*8)+15,obj.bg)
+    end
+
+  end
+
   return obj
 end
 
@@ -43,11 +83,11 @@ local function controls(props)
   local obj   = {}
   local props = props or {}
 
-  obj.l = props.l or btns.l 
+  obj.l = props.l or btns.l
   obj.r = props.r or btns.r
-  obj.u = props.u or btns.u 
+  obj.u = props.u or btns.u
   obj.d = props.d or btns.d
-  obj.p = props.p or 0 
+  obj.p = props.p or 0
 
   obj.update = function(e)
     e.int.l = btn(obj.l, obj.p)
@@ -71,14 +111,42 @@ local function int()
   return obj
 end
 
+local function battle(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.health    = props.health or 100
+  obj.maxhealth = props.maxhealth or 100
+  obj.lives     = props.lives or 2
+
+  obj.update = function(e)
+  end
+
+  return obj
+end
+
+local function weapon(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.damage    = props.damage or 25
+  obj.rate      = props.rate or 10
+  obj.speed     = props.speed or 2
+
+  obj.update = function(e)
+  end
+
+  return obj
+end
+
 local function pos(props)
   local obj   = {}
   local props = props or {}
 
   obj.x = props.x or 10
   obj.y = props.y or 10
-  
-  obj.update = function(e)
+
+  obj.update = function(e,w)
     local x_new = obj.x
     local y_new = obj.y
 
@@ -124,12 +192,10 @@ function _init()
   sprite   = 1,
   controls = controls({ p = 0 }),
   cam      = camera(),
-  -- battle component
-  bat={lives=2,health=100,maxhealth=100},
-  -- weapon component
-  wea={damage=25,rate=10,speed=2},
+  battle   = battle(),
+  weapon   = weapon()
  }))
- 
+
  -- p2 entity
  add(world, entity({
   pos      = pos({ y = 50 }),
@@ -137,55 +203,24 @@ function _init()
   sprite   = 2,
   controls = controls({ p = 1 }),
   cam      = camera({ bg = 4 , x = 64 }),
-  -- battle component
-  bat={lives=2,health=100,maxhealth=100},
-  -- weapon component
-  wea={damage=25,rate=10,speed=2}
+  battle   = battle(),
+  weapon   = weapon()
  }))
 end
 
 function _update()
  for e in all(world) do
-  -- control system
-  if e.has('controls') and e.has('pos') then
-   e.controls.update(e)   
-  end
-
-  -- physics system
-  if e.has('pos') then
-   e.pos.update(e)
-  end
+  e.update(world)
  end
 end
 
 function _draw()
  cls()
- rectfill(0, 0, 127, 127, 1)
- 
- -- graphics system
- for z in all(world) do
-  if z.has('cam') then
-   rectfill(z.cam.x * 8, z.cam.y * 8, z.cam.w * 8, z.cam.h * 8, z.cam.bg)
-  
-   local map_x = z.cam.x + (z.cam.w*8)/2 - z.pos.x - 4
-   local map_y = z.cam.y + (z.cam.h*8)/2 - z.pos.y - 4
-  
-   clip(z.cam.x,z.cam.y,z.cam.w*8,z.cam.h*8)
-  
-   map(0,0,map_x,map_y)
-  
-   for e in all(world) do
-    if e["pos"] and e["sprite"] then
-     -- if e["pos"]["x"] <  then 
-      spr(e.sprite,e.pos.x + map_x,e.pos.y + map_y)
-     -- end
-    end
-   end
- 
-   clip()
+ for e in all(world) do
+  if e.has('cam') then
+   e.cam.update(e,world)
   end
  end
- 
 end
 __gfx__
 00000000001111000022220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
