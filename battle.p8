@@ -71,8 +71,8 @@ local function camera(props)
 
     if e.has('battle') then
 
-      for hearts=1,e.battle.lives do
-       spr(3,obj.x+5+(10*(hearts-1)),(obj.y*8)+(obj.h*8)-10)
+      for hearts=0,e.battle.lives - 1 do
+       spr(3,obj.x+5+(10*(hearts)),(obj.y*8)+(obj.h*8)-10)
       end
      
       local startx = obj.x
