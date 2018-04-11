@@ -183,24 +183,42 @@ local function pos(props)
 
     -- map hittest 
     
-    local hit = false
+    local xhit = false
     
     local x1=x_new/8
-    local y1=y_new/8
+    local y1=obj.y/8
     local x2=(x_new+7)/8
-    local y2=(y_new+7)/8
-    local a=fget(mget(x1,y1),0)
-    local b=fget(mget(x1,y2),0)
-    local c=fget(mget(x2,y2),0)
-    local d=fget(mget(x2,y1),0)
+    local y2=(obj.y+7)/8
+    local xa=fget(mget(x1,y1),0)
+    local xb=fget(mget(x1,y2),0)
+    local xc=fget(mget(x2,y2),0)
+    local xd=fget(mget(x2,y1),0)
     
-    if a or b or c or d then
-     hit = true
+    if xa or xb or xc or xd then
+     xhit = true
     end
 
+    local yhit = false
+    
+    x1=obj.x/8
+    y1=y_new/8
+    x2=(obj.x+7)/8
+    y2=(y_new+7)/8
+    local ya=fget(mget(x1,y1),0)
+    local yb=fget(mget(x1,y2),0)
+    local yc=fget(mget(x2,y2),0)
+    local yd=fget(mget(x2,y1),0)
+    
+    if ya or yb or yc or yd then
+     yhit = true
+    end    
+    
+
     -- update position
-    if hit == false then
+    if xhit == false then
      obj.x = x_new
+    end
+    if yhit == false then 
      obj.y = y_new
     end
   end
