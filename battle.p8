@@ -77,7 +77,7 @@ local function camera(props)
      
       local startx = obj.x
       local starty = obj.y + obj.h*8
-      rectfill(startx,starty,startx + 1, starty - e.battle.health,8)
+      rectfill(startx,starty,startx + 1, starty - (obj.h*8 / 100 * e.battle.health),8)
 
     end
 
