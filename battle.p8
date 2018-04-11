@@ -124,6 +124,10 @@ function _init()
   sprite   = 1,
   controls = controls({ p = 0 }),
   cam      = camera(),
+  -- battle component
+  bat={lives=2,health=100,maxhealth=100},
+  -- weapon component
+  wea={damage=25,rate=10,speed=2},
  }))
  
  -- p2 entity
@@ -133,6 +137,10 @@ function _init()
   sprite   = 2,
   controls = controls({ p = 1 }),
   cam      = camera({ bg = 4 , x = 64 }),
+  -- battle component
+  bat={lives=2,health=100,maxhealth=100},
+  -- weapon component
+  wea={damage=25,rate=10,speed=2}
  }))
 end
 
