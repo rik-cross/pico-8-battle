@@ -16,7 +16,11 @@ function _init()
   -- controls component
   controls={u=2,d=3,l=0,r=1},
   -- camera component
-  cam={bg=3,x=0,y=0,w=8,h=12}
+  cam={bg=3,x=0,y=0,w=8,h=12},
+  -- battle component
+  bat={lives=2,health=100,maxhealth=100},
+  -- weapon component
+  wea={damage=25,rate=10,speed=2}
  })
  
  -- p2 entity
@@ -30,7 +34,11 @@ function _init()
   -- controls component
   controls={u=12,d=13,l=14,r=14},
   -- camera component
-  cam={bg=4,x=60,y=0,w=8,h=12}
+  cam={bg=4,x=64,y=0,w=8,h=12},
+  -- battle component
+  bat={lives=2,health=100,maxhealth=100},
+  -- weapon component
+  wea={damage=25,rate=10,speed=2}
  })
 
 end
