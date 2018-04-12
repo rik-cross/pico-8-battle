@@ -63,7 +63,7 @@ local function camera(props)
 
     for o in all(w) do
      if o["pos"] and o["sprite"] then
-       spr(o.sprite,o.pos.x + map_x,o.pos.y + map_y)
+       spr(o.sprite+(flr(o.pos.angle/45)),o.pos.x + map_x,o.pos.y + map_y)
      end
     end
 
@@ -72,9 +72,9 @@ local function camera(props)
     if e.has('battle') then
 
       for hearts=0,e.battle.lives - 1 do
-       spr(3,obj.x+5+(10*(hearts)),(obj.y*8)+(obj.h*8)-10)
+       spr(1,obj.x+5+(10*(hearts)),(obj.y*8)+(obj.h*8)-10)
       end
-     
+
       local startx = obj.x
       local starty = obj.y + obj.h*8
       rectfill(startx,starty,startx + 1, starty - (obj.h*8 / 100 * e.battle.health),8)
@@ -152,6 +152,7 @@ local function pos(props)
 
   obj.x = props.x or 10
   obj.y = props.y or 10
+  obj.angle = props.angle or 0
 
   obj.update = function(e,w)
     local x_new = obj.x
@@ -160,31 +161,58 @@ local function pos(props)
     -- if entity wants to move up
     if (e.int.u) then
       y_new = obj.y - 1
-      e.int.u = false
+      -- e.int.u = false
     end
 
     -- if entity wants to move down
     if (e.int.d) then
       y_new = obj.y + 1
-      e.int.d = false
+      -- e.int.d = false
     end
 
     -- if entity wants to move up
     if (e.int.l) then
       x_new = obj.x - 1
-      e.int.l = false
+      -- e.int.l = false
     end
 
     -- if entity wants to move up
     if (e.int.r) then
       x_new = obj.x + 1
-      e.int.r = false
+      -- e.int.r = false
     end
 
-    -- map hittest 
-    
+    -- update player angle
+    if e.int.u == false and e.int.d == false and e.int.l == false and e.int.r == false then
+     e.pos.angle = e.pos.angle
+    elseif e.int.u == true and e.int.d == false and e.int.l == false and e.int.r == false then
+     e.pos.angle = 0
+    elseif e.int.u == true and e.int.d == false and e.int.l == false and e.int.r == true then
+     e.pos.angle = 45
+    elseif e.int.u == false and e.int.d == false and e.int.l == false and e.int.r == true then
+     e.pos.angle = 90
+    elseif e.int.u == false and e.int.d == true and e.int.l == false and e.int.r == true then
+     e.pos.angle = 135
+    elseif e.int.u == false and e.int.d == true and e.int.l == false and e.int.r == false then
+     e.pos.angle = 180
+    elseif e.int.u == false and e.int.d == true and e.int.l == true and e.int.r == false then
+     e.pos.angle = 225
+    elseif e.int.u == false and e.int.d == false and e.int.l == true and e.int.r == false then
+     e.pos.angle = 270
+    elseif e.int.u == true and e.int.d == false and e.int.l == true and e.int.r == false then
+     e.pos.angle = 315
+    end
+
+    -- reset player intention
+    e.int.u = false
+    e.int.d = false
+    e.int.l = false
+    e.int.r = false
+
+    -- map hittest
+
     local xhit = false
-    
+
     local x1=x_new/8
     local y1=obj.y/8
     local x2=(x_new+7)/8
@@ -193,13 +221,13 @@ local function pos(props)
     local xb=fget(mget(x1,y2),0)
     local xc=fget(mget(x2,y2),0)
     local xd=fget(mget(x2,y1),0)
-    
+
     if xa or xb or xc or xd then
      xhit = true
     end
 
     local yhit = false
-    
+
     x1=obj.x/8
     y1=y_new/8
     x2=(obj.x+7)/8
@@ -208,17 +236,17 @@ local function pos(props)
     local yb=fget(mget(x1,y2),0)
     local yc=fget(mget(x2,y2),0)
     local yd=fget(mget(x2,y1),0)
-    
+
     if ya or yb or yc or yd then
      yhit = true
-    end    
-    
+    end
+
 
     -- update position
     if xhit == false then
      obj.x = x_new
     end
-    if yhit == false then 
+    if yhit == false then
      obj.y = y_new
     end
   end
@@ -231,7 +259,7 @@ function _init()
  add(world, entity({
   pos      = pos(),
   int      = int(),
-  sprite   = 1,
+  sprite   = 2,
   controls = controls({ p = 0 }),
   cam      = camera(),
   battle   = battle(),
@@ -266,14 +294,14 @@ function _draw()
  end
 end
 __gfx__
-00000000001111000022220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000011111100222222008800880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700111111112222222288888888000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000111111192222222988888888000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000111111192222222908888880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700111111112222222200888800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000011111100222222000088000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000001111000022220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000088008800001100000011110000010000010000000011000000001000001000001111000000000000000000000000000000000000000000000000000
+00700700888888880011110000001110000011000111000000011000000011100011000001110000000000000000000000000000000000000000000000000000
+00077000888888880111111000011110011111100011101000011000010111000111111001111000000000000000000000000000000000000000000000000000
+00077000088888800001100000111010011111100001111001111110011110000111111001011100000000000000000000000000000000000000000000000000
+00700700008888000001100001110000000011000000111000111100011100000011000000001110000000000000000000000000000000000000000000000000
+00000000000880000001100000100000000010000001111000011000011110000001000000000100000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 7777f77755555555ffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6666f76656666665ffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 6666f76656666665ffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
