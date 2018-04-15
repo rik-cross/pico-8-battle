@@ -9,13 +9,17 @@ local btns = {
   r = 1,
   u = 2,
   d = 3,
+  o = 4,
+  x = 5
 }
+
 local world={}
 
 local function entity(props)
   local ent   = {}
   local props = props or {}
 
+  ent.del      = false
   ent.pos      = props.pos
   ent.int      = props.int
   ent.sprite   = props.sprite
@@ -23,6 +27,7 @@ local function entity(props)
   ent.anim     = props.anim
   ent.cam      = props.cam
   ent.battle   = props.battle
+  ent.coll     = props.coll
 
   ent.has = function(key)
     return ent[key] ~= nil
@@ -30,13 +35,28 @@ local function entity(props)
 
   ent.update = function(w)
 
+    -- delete entities
+    if ent.del then
+      del(w,ent)
+    end
+
     -- control system
     if ent.has('controls') and ent.has('pos') and ent.has('int') then
      ent.controls.update(ent)
     end
 
+    -- battle system
+    if ent.has('battle') then
+     ent.battle.update(ent, world)
+    end
+
     -- physics system
-    if ent.has('pos') and ent.has('int') then
+    if ent.has('pos') then
+     ent.pos.update(ent,w)
+    end
+
+    -- collision system
+    if ent.has('collision') then
      ent.pos.update(ent,w)
     end
 
@@ -70,7 +90,7 @@ local function camera(props)
   map(0,0,map_x,map_y)
 
   for o in all(w) do
-   if o["pos"] and o["sprite"] then
+   if o.has('pos') and o.has('sprite') then
 
        -- use sprite palette info to recolour sprite
        -- (arrys start at 1)
@@ -78,8 +98,9 @@ local function camera(props)
         pal(c,o.sprite.recolour[c+1])
        end
 
-       spr(o.sprite.currentnumber+(flr(o.pos.angle/45)),o.pos.x + map_x,o.pos.y + map_y)
+       spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.pos.angle/45))),o.pos.x + map_x, o.pos.y + map_y)
      end
+     pal()
     end
 
     clip()
@@ -113,6 +134,28 @@ local function camera(props)
   return obj
 end
 
+local function collision(props)
+  local obj   = {}
+  local props = props or {}
+
+  obj.isdestroyed = props.isdestroyed or false
+  obj.destroys = props.destroys or false
+  obj.collidedwith = {}
+
+  obj.update = function(e,w)
+   for c in all(collidedwith) do
+
+    if e.has('battle') and o.coll.destroys then
+
+    end
+
+   end
+   obj.collidedwith = {}
+  end
+
+  return obj
+end
+
 local function controls(props)
   local obj   = {}
   local props = props or {}
@@ -121,6 +164,8 @@ local function controls(props)
   obj.r = props.r or btns.r
   obj.u = props.u or btns.u
   obj.d = props.d or btns.d
+  obj.o = props.o or btns.o
+  obj.x = props.x or btns.x
   obj.p = props.p or 0
 
   obj.update = function(e)
@@ -128,6 +173,8 @@ local function controls(props)
     e.int.r = btn(obj.r, obj.p)
     e.int.u = btn(obj.u, obj.p)
     e.int.d = btn(obj.d, obj.p)
+    e.int.o = btn(obj.o, obj.p)
+    e.int.x = btn(obj.x, obj.p)
   end
 
   return obj
@@ -152,7 +199,8 @@ local function int()
   obj.r = false
   obj.u = false
   obj.d = false
-  obj.s = false
+  obj.o = false
+  obj.x = false
 
   return obj
 end
@@ -190,7 +238,19 @@ local function battle(props)
   obj.maxhealth = props.maxhealth or 100
   obj.lives     = props.lives or 2
 
-  obj.update = function(e)
+  obj.update = function(e,w)
+
+   if e.has('int') then
+    if e.int.o then
+     
+     -- create a new bullet entity
+     add(w, entity({
+      -- how to instantiate components here?
+      -- (they are out of scope)
+     }))
+    end
+   end
+
   end
 
   return obj
@@ -216,10 +276,12 @@ local function pos(props)
 
   obj.x = props.x or 10
   obj.y = props.y or 10
-  obj.w = props.w or 8
+  obj.w = props.w or 6
   obj.h = props.h or 8
+  obj.speed = props.speed or 1
   obj.angle = props.angle or 180
   obj.moving = props.moving or false
+  obj.velocity = props.velocity or 0
 
   obj.update = function(e,w)
 
@@ -228,56 +290,72 @@ local function pos(props)
     local x_new = obj.x
     local y_new = obj.y
 
-    -- if entity wants to move up
-    if (e.int.u) then
-      y_new = obj.y - 1
-      obj.moving = true
+    if e.has('int') then
+
+      -- if entity wants to move up
+      if (e.int.u) then
+        y_new = obj.y - obj.speed
+        obj.moving = true
+      end
+
+      -- if entity wants to move down
+      if (e.int.d) then
+        y_new = obj.y + obj.speed
+        obj.moving = true
+      end
+
+      -- if entity wants to move up
+      if (e.int.l) then
+        x_new = obj.x - obj.speed
+        obj.moving = true
+      end
+
+      -- if entity wants to move up
+      if (e.int.r) then
+        x_new = obj.x + obj.speed
+        obj.moving = true
+      end
+
+      if e.int.u and not e.int.d and not e.int.l and not e.int.r then
+       obj.angle = 0
+      elseif e.int.u and not e.int.d and not e.int.l and e.int.r then
+       obj.angle = 45
+      elseif not e.int.u and not e.int.d and not e.int.l and e.int.r then
+       obj.angle = 90
+      elseif not e.int.u and e.int.d and not e.int.l and e.int.r then
+       obj.angle = 135
+      elseif not e.int.u and e.int.d and not e.int.l and not e.int.r then
+       obj.angle = 180
+      elseif not e.int.u and e.int.d and e.int.l and not e.int.r then
+       obj.angle = 225
+      elseif not e.int.u and not e.int.d and e.int.l and not e.int.r then
+       obj.angle = 270
+      elseif e.int.u and not e.int.d and e.int.l and not e.int.r then
+       obj.angle = 315
+      end
+
     end
 
-    -- if entity wants to move down
-    if (e.int.d) then
-      y_new = obj.y + 1
-      obj.moving = true
+    if (obj.angle > 0 and obj.angle < 180) then
+     x_new += obj.velocity
+    end
+    if (obj.angle > 180 and obj.angle < 360) then
+     x_new -= obj.velocity
+    end
+    if (obj.angle > 270 or obj.angle < 90) then
+     y_new -= obj.velocity
+    end
+    if (obj.angle < 270 and obj.angle > 90) then
+     y_new += obj.velocity
     end
 
-    -- if entity wants to move up
-    if (e.int.l) then
-      x_new = obj.x - 1
-      obj.moving = true
+    if e.has('int') then
+      -- reset player intention
+      e.int.u = false
+      e.int.d = false
+      e.int.l = false
+      e.int.r = false
     end
-
-    -- if entity wants to move up
-    if (e.int.r) then
-      x_new = obj.x + 1
-      obj.moving = true
-    end
-
-    -- update player angle
-    if not e.int.u and not e.int.d and not e.int.l and not e.int.r then
-     e.pos.angle = e.pos.angle
-    elseif e.int.u  and not e.int.d and not e.int.l and not e.int.r then
-     e.pos.angle = 0
-    elseif e.int.u and not e.int.d and not e.int.l and e.int.r then
-     e.pos.angle = 45
-    elseif not e.int.u and not e.int.d and not e.int.l and e.int.r then
-     e.pos.angle = 90
-    elseif not e.int.u and e.int.d and not e.int.l and e.int.r then
-     e.pos.angle = 135
-    elseif not e.int.u and e.int.d and not e.int.l and not e.int.r then
-     e.pos.angle = 180
-    elseif not e.int.u and e.int.d and e.int.l and not e.int.r then
-     e.pos.angle = 225
-    elseif not e.int.u and not e.int.d and e.int.l and not e.int.r then
-     e.pos.angle = 270
-    elseif e.int.u and not e.int.d and e.int.l and not e.int.r then
-     e.pos.angle = 315
-    end
-
-    -- reset player intention
-    e.int.u = false
-    e.int.d = false
-    e.int.l = false
-    e.int.r = false
 
     -- map hittest
 
@@ -300,8 +378,8 @@ local function pos(props)
 
     x1=obj.x/8
     y1=y_new/8
-    x2=(obj.x+7)/8
-    y2=(y_new+7)/8
+    x2=(obj.x+(obj.w-1))/8
+    y2=(y_new+(obj.h-1))/8
     local ya=fget(mget(x1,y1),0)
     local yb=fget(mget(x1,y2),0)
     local yc=fget(mget(x2,y2),0)
@@ -311,21 +389,32 @@ local function pos(props)
      yhit = true
     end
 
+    if (yhit or xhit) and e.has('coll') then
+     if e.coll.isdestroyed then
+      e.del = true
+     end
+    end
+
     -- other entity hittest
     for o in all(w) do
-     if o ~= e then
+     if o ~= e and o.has('pos') then
       local o_x1=o.pos.x
       local o_y1=o.pos.y
-      local o_x2=(o.pos.x+(o.pos.w-1))
-      local o_y2=(o.pos.y+(o.pos.h-1))
+      local o_x2=(o.pos.x+(o.pos.w))
+      local o_y2=(o.pos.y+(o.pos.h))
       
       if x_new < o_x2 and
-             x_new + (e.pos.w - 1) > o_x1 and
+             x_new + (e.pos.w) > o_x1 and
              y_new < o_y2 and
-             y_new + (e.pos.h - 1)> o_y1
+             y_new + (e.pos.h)> o_y1
              then
        xhit = true
        yhit = true
+
+       if e.has('coll') and o.has('coll') then
+        add(e.coll.collidedwith,o)
+        add(o.coll.collidedwith,e)
+       end
 
       end
      end
@@ -353,7 +442,8 @@ function _init()
   cam      = camera(),
   anim     = anim(),
   battle   = battle(),
-  weapon   = weapon()
+  weapon   = weapon(),
+  coll     = collision()
  }))
 
  -- p2 entity
@@ -365,15 +455,24 @@ function _init()
   cam      = camera({ x = 64 }),
   anim     = anim(),
   battle   = battle(),
-  weapon   = weapon()
+  weapon   = weapon(),
+  coll     = collision()
  }))
 
  -- crate entity
  add(world, entity({
   pos      = pos({ x = 150, y=20 }),
   cam      = camera({ x=48, y=48, w=4, h=4  }),
-  sprite   = sprite({ number = 44, spritesinsheet = 1 }),
-  anim     = anim({ animspeed = 8, movementanim = 'always', frames = 2 })
+  sprite   = sprite({ number = 48, spritesinsheet = 1 }),
+  anim     = anim({ animspeed = 8, movementanim = 'always', frames = 2 }),
+  coll    = collision()
+ }))
+
+ -- bullet entity
+ add(world, entity({
+  pos      = pos({ x = 30, y=30, w=2, h=2, angle=90, velocity=4 }),
+  sprite   = sprite({ number = 60, spritesinsheet = 1 }),
+  coll    = collision({ isdestroyed = true })
  }))
 end
 
@@ -393,30 +492,30 @@ function _draw()
  end
 end
 __gfx__
-00000000000000000088880000880000008888000008880000888800008880000088880000008800008888000088000000888800000888000088880000888000
-000000000880088000888800008888000088ff000088f800008ff800008f880000ff88000088880000888800008888000088ff000088f800008ff800008f8800
-00700700888888880018810000888f000081ff00008fff00001ff10000fff80000ff180000f888000018810000888f000081ff00008fff00001ff10000fff800
-0007700088888888001811000081ff0000811100008f1100001111000011f8000011180000ff1800001811000081ff0000811100008f1100001111000011f800
-000770000888888000118100008111000081f1000081110000f11f0000111800001f1800001118000f118100008111000081f1000081110000f111f000111800
-00700700008888000018110000011f000011f100001f1100001111000011f100001f110000f11000001811000001f10000111f0000f111000011110000111f00
-000000000008800000111100000c1100001111000011c00000111100000c1100001111000011c00000111100000c11000011110000110c000011110000c01100
-000000000000000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000c000000000010000c0c000000c000000000c000000c000
-00888800000088000088880000880000008888000008880000888800008880000088880000008800008888000088000000888800000888000088880000888000
-00ff88000088880000888800008888000088ff000088f800008ff800008f880000ff88000088880000888800008888000088ff000088f800008ff800008f8800
-00ff180000f888000018810000888f000081ff00008fff00001ff10000fff80000ff180000f888000018810000888f000081ff00008fff00001ff10000fff800
-0011180000ff1800001811000081ff0000811100008f1100001111000011f8000011180000ff1800001811000081ff0000811100008f1100001111000011f800
-001f18000011180000118100008111000081f1000081110000f11f0000111800001f180000111800001181f0008111000081f100008111000f111f0000111800
-00f11100001f10000018110000011f000011f100001f1100001111000011f100001f110000f1100000181100000111f0001f11000011f10000111100001f1100
-001111000011c00000111100000c1100001111000011c00000111100000c1100001111000011c000001111000000110000111100001100000011110000011100
-000c0c000010000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000000c000000c100000c0c000000c00000c00000000c0000
-00888800000088006666666677776777ffff7fff44454445bbbbbbbbccccccccaaaaaaaa44444444777777779999999900000000000000000000000000000000
-00ff880000888800666666666666666666667f6644454445bbbbbbbb7cccccc7aaaaaaaa44444444757775779999999900000000000000000000000000000000
-00ff180000f88800666666666777777766667f6644454445bbbbbbbbc7cccc7caaaaaaaa44444444555755579999999900000000000000000000000000000000
-0011180000ff180066666666666666667777777755554445bbbbbbbbccccccccaaaaaaaa444444447577757799aaaa9900000000000000000000000000000000
-001f18000011180066666666777767777fffffff44454445bbbbbbbbccccccccaaaaaaaa444444447777777799aaaa9900000000000000000000000000000000
-0011f1000f11100066666666666666667f66666644454445bbbbbbbbccc77cccaaaaaaaa444444447775777599aaaa9900000000000000000000000000000000
-001111000011000066666666677777777f66666644454445bbbbbbbbcc7cc7ccaaaaaaaa444444445755575599aaaa9900000000000000000000000000000000
-00c0c000001c000066666666666666667777777744455555bbbbbbbbccccccccaaaaaaaa444444447775777599aaaa9900000000000000000000000000000000
+00000000000000000888800008800000088880000088800008888000088800000888800000088000088880000880000008888000008880000888800008880000
+00000000088008800888800008888000088ff000088f800008ff800008f880000ff88000088880000888800008888000088ff000088f800008ff800008f88000
+0070070088888888018810000888f000081ff00008fff00001ff10000fff80000ff180000f888000018810000888f000081ff00008fff00001ff10000fff8000
+000770008888888801811000081ff0000811100008f1100001111000011f8000011180000ff1800001811000081ff0000811100008f1100001111000011f8000
+00077000088888800118100008111000081f1000081110000f11f0000111800001f1800001118000f118100008111000081f1000081110000f111f0001118000
+0070070000888800018110000011f000011f100001f1100001111000011f100001f110000f11000001811000001f10000111f0000f111000011110000111f000
+00000000000880000111100000c1100001111000011c00000111100000c1100001111000011c00000111100000c11000011110000110c000011110000c011000
+00000000000000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000c000000000010000c0c000000c000000000c000000c0000
+08888000000880000888800008800000088880000088800008888000088800000888800000088000088880000880000008888000008880000888800008880000
+0ff88000088880000888800008888000088ff000088f800008ff800008f880000ff88000088880000888800008888000088ff000088f800008ff800008f88000
+0ff180000f888000018810000888f000081ff00008fff00001ff10000fff80000ff180000f888000018810000888f000081ff00008fff00001ff10000fff8000
+011180000ff1800001811000081ff0000811100008f1100001111000011f8000011180000ff1800001811000081ff0000811100008f1100001111000011f8000
+01f18000011180000118100008111000081f1000081110000f11f0000111800001f180000111800001181f0008111000081f100008111000f111f00001118000
+0f11100001f10000018110000011f000011f100001f1100001111000011f100001f110000f1100000181100000111f0001f11000011f10000111100001f11000
+01111000011c00000111100000c1100001111000011c00000111100000c1100001111000011c0000011110000001100001111000011000000111100000111000
+00c0c000010000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000000c000000c100000c0c000000c00000c00000000c00000
+08888000000880006666666677776777ffff7fff44454445bbbbbbbbccccccccaaaaaaaa44444444777777779999999900000000000000000000000000000000
+0ff8800008888000666666666666666666667f6644454445bbbbbbbb7cccccc7aaaaaaaa44444444757775779999999900000000000000000000000000000000
+0ff180000f888000666666666777777766667f6644454445bbbbbbbbc7cccc7caaaaaaaa44444444555755579999999900000000000000000000000000000000
+011180000ff1800066666666666666667777777755554445bbbbbbbbccccccccaaaaaaaa444444447577757799aaaa9900000000000000000000000000000000
+01f180000111800066666666777767777fffffff44454445bbbbbbbbccccccccaaaaaaaa444444447777777799aaaa9900000000000000000000000000000000
+011f1000f111000066666666666666667f66666644454445bbbbbbbbccc77cccaaaaaaaa444444447775777599aaaa9900000000000000000000000000000000
+011110000110000066666666677777777f66666644454445bbbbbbbbcc7cc7ccaaaaaaaa444444445755575599aaaa9900000000000000000000000000000000
+0c0c000001c0000066666666666666667777777744455555bbbbbbbbccccccccaaaaaaaa444444447775777599aaaa9900000000000000000000000000000000
 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555000000555500000000000000000000
 57447445564464455744744556446445574474455644644557447445564464455744744556446445574474455644644555000000566500000000000000000000
 54744745546446455474474554644645547447455464464554744745546446455474474554644645547447455464464500000000566500000000000000000000
