@@ -1,496 +1,558 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+
+
 -- battle
 -- by rik
 
-local btns = {
-  l = 0,
-  r = 1,
-  u = 2,
-  d = 3,
-  o = 4,
-  x = 5
-}
+world={}
 
-local world={}
+-----------
+-- entities
+-----------
 
-local function entity(props)
-  local ent   = {}
+entity = {}
+entity.__index = entity
+
+function entity:create(props)
+  local this = {}
   local props = props or {}
 
-  ent.del      = false
-  ent.pos      = props.pos
-  ent.int      = props.int
-  ent.sprite   = props.sprite
-  ent.controls = props.controls
-  ent.anim     = props.anim
-  ent.cam      = props.cam
-  ent.battle   = props.battle
-  ent.coll     = props.coll
+  this.del       = false
+  this.sprite    = props.sprite
+  this.animation = props.animation
+  this.position  = props.position
+  this.controls  = props.controls
+  this.intention = props.intention
+  this.camera    = props.camera
+  this.battle    = props.battle
+  this.weapon    = props.weapon
+  this.collision = props.collision
 
-  ent.has = function(key)
-    return ent[key] ~= nil
-  end
-
-  ent.update = function(w)
-
-    -- delete entities
-    if ent.del then
-      del(w,ent)
-    end
-
-    -- control system
-    if ent.has('controls') and ent.has('pos') and ent.has('int') then
-     ent.controls.update(ent)
-    end
-
-    -- battle system
-    if ent.has('battle') then
-     ent.battle.update(ent, world)
-    end
-
-    -- physics system
-    if ent.has('pos') then
-     ent.pos.update(ent,w)
-    end
-
-    -- collision system
-    if ent.has('collision') then
-     ent.pos.update(ent,w)
-    end
-
-    -- animation system
-    if ent.has('anim') then
-     ent.anim.update(ent)
-    end
-
-  end
-
-  return ent
+  setmetatable(this, entity)
+  return this
 end
 
-local function camera(props)
- local obj   = {}
- local props = props or {}
+function entity:has(key)
+  return self[key] ~= nil
+end
 
- obj.bg = props.bg or 0
- obj.x  = props.x  or 0
- obj.y  = props.y  or 0
- obj.w  = props.w  or 8
- obj.h  = props.h  or 16
+function entity:update(e,w)
 
- obj.update = function(e,w)
+  -- delete entities
+  if e.del then
+    del(w,e)
+  end
 
-  local map_x = e.cam.x + (e.cam.w*8)/2 - e.pos.x - 4
-  local map_y = e.cam.y + (e.cam.h*8)/2 - e.pos.y - 4
+  -- control system
+  if e:has('controls') and e:has('position') and e:has('intention') then
+   e.controls:update(e)
+  end
 
-  clip(e.cam.x,e.cam.y,e.cam.w*8,e.cam.h*8)
+  -- weapon system
+  if e:has('weapon') then
+   e.weapon:update(e, w)
+  end
 
-  map(0,0,map_x,map_y)
+  -- physics system
+  if e:has('position') then
+   e.position:update(e, w)
+  end
 
-  for o in all(w) do
-   if o.has('pos') and o.has('sprite') then
+  -- collision system
+  if e:has('collision') then
+   e.collision:update(e, w)
+  end
 
-       -- use sprite palette info to recolour sprite
-       -- (arrys start at 1)
-       for c=0,15 do
-        pal(c,o.sprite.recolour[c+1])
-       end
+  -- animation system
+  if e:has('animation') then
+   e.animation:update(e)
+  end
 
-       spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.pos.angle/45))),o.pos.x + map_x, o.pos.y + map_y)
-     end
-     pal()
-    end
+end
 
-    clip()
+---------
+-- sprite
+---------
 
-    -- camera border
-    rect(obj.x,obj.y,obj.x+(obj.w*8)-1,obj.y+(obj.h*8)-1,13)
+sprite = {}
+sprite.__index = sprite
 
-    if e.has('battle') then
-     for hearts=0,e.battle.lives - 1 do
-      if obj.x < 64 then
-       spr(1,obj.x+5+(10*(hearts)),(obj.y*8)+(obj.h*8)-10)
-      else
-       spr(1,obj.x+(obj.w*5)+(10*(hearts)),(obj.y*8)+(obj.h*8)-10)
+function sprite:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.number          = props.number or 2
+    this.currentnumber   = this.number
+    this.spritesinsheet  = props.spritesinsheet or 8
+    this.recolour        = props.recolour or {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
+
+    setmetatable(this, sprite)
+    return this
+end
+
+------------
+-- animation
+------------
+
+animation = {}
+animation.__index = animation
+
+function animation:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.frames = props.frames or 4
+    this.animspeed = props.animspeed or 2
+    this.timeoncurrent = 0
+    this.animtype = props.movementanim or 'movement_only'
+
+    setmetatable(this, animation)
+    return this
+end
+
+function animation:update(e)
+ if (self.animtype == 'always') or self.animtype == 'movement_only' and e.position.moving then
+  self.timeoncurrent += 1
+  if self.timeoncurrent > self.animspeed then
+   e.sprite.currentnumber += e.sprite.spritesinsheet
+   if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * self.frames) then
+    e.sprite.currentnumber = e.sprite.number
+   end
+   self.timeoncurrent = 0
+  end
+ end
+end
+
+-----------
+-- position
+-----------
+
+position = {}
+position.__index = position
+
+function position:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.x         = props.x or 10
+    this.y         = props.y or 10
+    this.w         = props.w or 6
+    this.h         = props.h or 8
+    this.speed     = props.speed or 1
+    this.angle     = props.angle or 180
+    this.moving    = props.moving or false
+    this.velocity  = props.velocity or 0
+
+    setmetatable(this, position)
+    return this
+end
+
+function position:update(e,w)
+
+self.moving = false
+
+local x_new = self.x
+local y_new = self.y
+
+if e:has('intention') then
+
+  -- if entity wants to move up
+  if (e.intention.u) then
+    y_new = self.y - self.speed
+    self.moving = true
+  end
+
+  -- if entity wants to move down
+  if (e.intention.d) then
+    y_new = self.y + self.speed
+    self.moving = true
+  end
+
+  -- if entity wants to move up
+  if (e.intention.l) then
+    x_new = self.x - self.speed
+    self.moving = true
+  end
+
+  -- if entity wants to move up
+  if (e.intention.r) then
+    x_new = self.x + self.speed
+    self.moving = true
+  end
+
+  if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
+   self.angle = 0
+  elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+   self.angle = 45
+  elseif not e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+   self.angle = 90
+  elseif not e.intention.u and e.intention.d and not e.intention.l and e.intention.r then
+   self.angle = 135
+  elseif not e.intention.u and e.intention.d and not e.intention.l and not e.intention.r then
+   self.angle = 180
+  elseif not e.intention.u and e.intention.d and e.intention.l and not e.intention.r then
+   self.angle = 225
+  elseif not e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+   self.angle = 270
+  elseif e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+   self.angle = 315
+  end
+
+end
+
+if (self.angle > 0 and self.angle < 180) then
+ x_new += self.velocity
+end
+if (self.angle > 180 and self.angle < 360) then
+ x_new -= self.velocity
+end
+if (self.angle > 270 or self.angle < 90) then
+ y_new -= self.velocity
+end
+if (self.angle < 270 and self.angle > 90) then
+ y_new += self.velocity
+end
+
+if e:has('intention') then
+  -- reset player intention
+  e.intention.u = false
+  e.intention.d = false
+  e.intention.l = false
+  e.intention.r = false
+end
+
+-- map hittest
+
+local xhit = false
+
+local x1=x_new/8
+local y1=self.y/8
+local x2=(x_new+(self.w-1))/8
+local y2=(self.y+(self.h-1))/8
+local xa=fget(mget(x1,y1),0)
+local xb=fget(mget(x1,y2),0)
+local xc=fget(mget(x2,y2),0)
+local xd=fget(mget(x2,y1),0)
+
+if xa or xb or xc or xd then
+ xhit = true
+end
+
+local yhit = false
+
+x1=self.x/8
+y1=y_new/8
+x2=(self.x+(self.w-1))/8
+y2=(y_new+(self.h-1))/8
+local ya=fget(mget(x1,y1),0)
+local yb=fget(mget(x1,y2),0)
+local yc=fget(mget(x2,y2),0)
+local yd=fget(mget(x2,y1),0)
+
+if ya or yb or yc or yd then
+ yhit = true
+end
+
+if (yhit or xhit) and e:has('collision') then
+ if e.collision.isdestroyed then
+  e.del = true
+ end
+end
+
+-- other entity hittest
+for o in all(w) do
+ if o ~= e and o:has('position') then
+  local o_x1=o.position.x
+  local o_y1=o.position.y
+  local o_x2=(o.position.x+(o.position.w))
+  local o_y2=(o.position.y+(o.position.h))
+
+  if x_new < o_x2 and
+         x_new + (e.position.w) > o_x1 and
+         y_new < o_y2 and
+         y_new + (e.position.h)> o_y1
+         then
+   xhit = true
+   yhit = true
+
+   if e:has('collision') and o:has('collision') then
+    add(e.collision.collidedwith,o)
+    add(o.collision.collidedwith,e)
+   end
+
+  end
+ end
+end
+
+-- update position
+if xhit == false then
+ self.x = x_new
+end
+if yhit == false then
+ self.y = y_new
+end
+end
+
+-----------
+-- controls
+-----------
+
+controls = {}
+controls.__index = controls
+
+function controls:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.l = props.l or 0
+    this.r = props.r or 1
+    this.u = props.u or 2
+    this.d = props.d or 3
+    this.o = props.o or 4
+    this.x = props.x or 5
+    this.p = props.p or 0
+
+    setmetatable(this, controls)
+    return this
+end
+
+function controls:update(e)
+  e.intention.l = btn(self.l, self.p)
+  e.intention.r = btn(self.r, self.p)
+  e.intention.u = btn(self.u, self.p)
+  e.intention.d = btn(self.d, self.p)
+  e.intention.o = btn(self.o, self.p)
+  e.intention.x = btn(self.x, self.p)
+end
+
+------------
+-- intention
+------------
+
+intention = {}
+intention.__index = intention
+
+function intention:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.l = false
+    this.r = false
+    this.u = false
+    this.d = false
+    this.o = false
+    this.x = false
+
+    setmetatable(this, intention)
+    return this
+end
+
+---------
+-- camera
+---------
+
+camera = {}
+camera.__index = camera
+
+function camera:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.bg  = props.bg or 0
+    this.x   = props.x  or 0
+    this.y   = props.y  or 0
+    this.w   = props.w  or 8
+    this.h   = props.h  or 16
+
+    setmetatable(this, camera)
+    return this
+end
+
+function camera:update(e,w)
+
+ local map_x = e.camera.x + (e.camera.w*8)/2 - e.position.x - 4
+ local map_y = e.camera.y + (e.camera.h*8)/2 - e.position.y - 4
+
+ clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
+
+ map(0,0,map_x,map_y)
+
+ for o in all(w) do
+  if o:has('position') and o:has('sprite') then
+
+      -- use sprite palette info to recolour sprite
+      -- (arrys start at 1)
+      for c=0,15 do
+       pal(c,o.sprite.recolour[c+1])
       end
-     end
 
-     local startx = 0
-     local starty = 0
-     if obj.x < 64 then
-      startx = obj.x + 1
-      starty = (obj.y + obj.h*8) - 2
+      spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
+    end
+    pal()
+   end
+
+   clip()
+
+   -- camera border
+   rect(self.x,self.y,self.x+(self.w*8)-1,self.y+(self.h*8)-1,13)
+
+   if e:has('battle') then
+    for hearts=0,e.battle.lives - 1 do
+     if self.x < 64 then
+      spr(1,self.x+5+(10*(hearts)),(self.y*8)+(self.h*8)-10)
      else
-      startx = obj.x + (obj.w*8) - 3
-      starty = (obj.y + obj.h*8) - 2
+      spr(1,self.x+(self.w*5)+(10*(hearts)),(self.y*8)+(self.h*8)-10)
      end
-     rectfill(startx,starty,startx + 1, starty - (((obj.h*8)-3) / 100 * e.battle.health),8)
     end
 
-  end
-
-  return obj
-end
-
-local function collision(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.isdestroyed = props.isdestroyed or false
-  obj.destroys = props.destroys or false
-  obj.collidedwith = {}
-
-  obj.update = function(e,w)
-   for c in all(collidedwith) do
-
-    if e.has('battle') and o.coll.destroys then
-
+    local startx = 0
+    local starty = 0
+    if self.x < 64 then
+     startx = self.x + 1
+     starty = (self.y + self.h*8) - 2
+    else
+     startx = self.x + (self.w*8) - 3
+     starty = (self.y + self.h*8) - 2
     end
-
-   end
-   obj.collidedwith = {}
-  end
-
-  return obj
-end
-
-local function controls(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.l = props.l or btns.l
-  obj.r = props.r or btns.r
-  obj.u = props.u or btns.u
-  obj.d = props.d or btns.d
-  obj.o = props.o or btns.o
-  obj.x = props.x or btns.x
-  obj.p = props.p or 0
-
-  obj.update = function(e)
-    e.int.l = btn(obj.l, obj.p)
-    e.int.r = btn(obj.r, obj.p)
-    e.int.u = btn(obj.u, obj.p)
-    e.int.d = btn(obj.d, obj.p)
-    e.int.o = btn(obj.o, obj.p)
-    e.int.x = btn(obj.x, obj.p)
-  end
-
-  return obj
-end
-
-local function sprite(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.number = props.number or 2
-  obj.currentnumber = obj.number
-  obj.spritesinsheet = props.spritesinsheet or 8
-  obj.recolour = props.recolour or {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
-
-  return obj
-end
-
-local function int()
-  local obj = {}
-
-  obj.l = false
-  obj.r = false
-  obj.u = false
-  obj.d = false
-  obj.o = false
-  obj.x = false
-
-  return obj
-end
-
-local function anim(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.frames = props.frames or 4
-  obj.animspeed = props.animspeed or 2
-  obj.timeoncurrent = 0
-  obj.animtype = props.movementanim or 'movement_only'
-
-  obj.update = function(e)
-   if (obj.animtype == 'always') or obj.animtype == 'movement_only' and e.pos.moving then
-    obj.timeoncurrent += 1
-    if obj.timeoncurrent > obj.animspeed then
-     e.sprite.currentnumber += e.sprite.spritesinsheet
-     if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * obj.frames) then
-      e.sprite.currentnumber = e.sprite.number
-     end
-     obj.timeoncurrent = 0
-    end
-   end
-  end
-
-  return obj
-end
-
-local function battle(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.health    = props.health or 100
-  obj.maxhealth = props.maxhealth or 100
-  obj.lives     = props.lives or 2
-
-  obj.update = function(e,w)
-
-   if e.has('int') then
-    if e.int.o then
-     
-     -- create a new bullet entity
-     add(w, entity({
-      -- how to instantiate components here?
-      -- (they are out of scope)
-     }))
-    end
+    rectfill(startx,starty,startx + 1, starty - (((self.h*8)-3) / 100 * e.battle.health),8)
    end
 
-  end
+ end
 
-  return obj
+---------
+-- battle
+---------
+
+battle = {}
+battle.__index = battle
+
+function battle:create(props)
+    local this = {}
+    local props = props or {}
+
+    this.health    = props.health or 100
+    this.maxhealth = props.maxhealth or 100
+    this.lives     = props.lives or 2
+
+    setmetatable(this, battle)
+    return this
 end
 
-local function weapon(props)
-  local obj   = {}
-  local props = props or {}
+---------
+-- weapon
+---------
 
-  obj.damage    = props.damage or 25
-  obj.rate      = props.rate or 10
-  obj.speed     = props.speed or 2
+weapon = {}
+weapon.__index = weapon
 
-  obj.update = function(e)
-  end
+function weapon:create(props)
+    local this = {}
+    local props = props or {}
 
-  return obj
+    this.damage    = props.damage or 25
+    this.rate      = props.rate or 10
+    this.lastfired = 0
+    this.speed     = props.speed or 2
+
+    setmetatable(this, weapon)
+    return this
 end
 
-local function pos(props)
-  local obj   = {}
-  local props = props or {}
-
-  obj.x = props.x or 10
-  obj.y = props.y or 10
-  obj.w = props.w or 6
-  obj.h = props.h or 8
-  obj.speed = props.speed or 1
-  obj.angle = props.angle or 180
-  obj.moving = props.moving or false
-  obj.velocity = props.velocity or 0
-
-  obj.update = function(e,w)
-
-    obj.moving = false
-
-    local x_new = obj.x
-    local y_new = obj.y
-
-    if e.has('int') then
-
-      -- if entity wants to move up
-      if (e.int.u) then
-        y_new = obj.y - obj.speed
-        obj.moving = true
-      end
-
-      -- if entity wants to move down
-      if (e.int.d) then
-        y_new = obj.y + obj.speed
-        obj.moving = true
-      end
-
-      -- if entity wants to move up
-      if (e.int.l) then
-        x_new = obj.x - obj.speed
-        obj.moving = true
-      end
-
-      -- if entity wants to move up
-      if (e.int.r) then
-        x_new = obj.x + obj.speed
-        obj.moving = true
-      end
-
-      if e.int.u and not e.int.d and not e.int.l and not e.int.r then
-       obj.angle = 0
-      elseif e.int.u and not e.int.d and not e.int.l and e.int.r then
-       obj.angle = 45
-      elseif not e.int.u and not e.int.d and not e.int.l and e.int.r then
-       obj.angle = 90
-      elseif not e.int.u and e.int.d and not e.int.l and e.int.r then
-       obj.angle = 135
-      elseif not e.int.u and e.int.d and not e.int.l and not e.int.r then
-       obj.angle = 180
-      elseif not e.int.u and e.int.d and e.int.l and not e.int.r then
-       obj.angle = 225
-      elseif not e.int.u and not e.int.d and e.int.l and not e.int.r then
-       obj.angle = 270
-      elseif e.int.u and not e.int.d and e.int.l and not e.int.r then
-       obj.angle = 315
-      end
-
-    end
-
-    if (obj.angle > 0 and obj.angle < 180) then
-     x_new += obj.velocity
-    end
-    if (obj.angle > 180 and obj.angle < 360) then
-     x_new -= obj.velocity
-    end
-    if (obj.angle > 270 or obj.angle < 90) then
-     y_new -= obj.velocity
-    end
-    if (obj.angle < 270 and obj.angle > 90) then
-     y_new += obj.velocity
-    end
-
-    if e.has('int') then
-      -- reset player intention
-      e.int.u = false
-      e.int.d = false
-      e.int.l = false
-      e.int.r = false
-    end
-
-    -- map hittest
-
-    local xhit = false
-
-    local x1=x_new/8
-    local y1=obj.y/8
-    local x2=(x_new+(obj.w-1))/8
-    local y2=(obj.y+(obj.h-1))/8
-    local xa=fget(mget(x1,y1),0)
-    local xb=fget(mget(x1,y2),0)
-    local xc=fget(mget(x2,y2),0)
-    local xd=fget(mget(x2,y1),0)
-
-    if xa or xb or xc or xd then
-     xhit = true
-    end
-
-    local yhit = false
-
-    x1=obj.x/8
-    y1=y_new/8
-    x2=(obj.x+(obj.w-1))/8
-    y2=(y_new+(obj.h-1))/8
-    local ya=fget(mget(x1,y1),0)
-    local yb=fget(mget(x1,y2),0)
-    local yc=fget(mget(x2,y2),0)
-    local yd=fget(mget(x2,y1),0)
-
-    if ya or yb or yc or yd then
-     yhit = true
-    end
-
-    if (yhit or xhit) and e.has('coll') then
-     if e.coll.isdestroyed then
-      e.del = true
-     end
-    end
-
-    -- other entity hittest
-    for o in all(w) do
-     if o ~= e and o.has('pos') then
-      local o_x1=o.pos.x
-      local o_y1=o.pos.y
-      local o_x2=(o.pos.x+(o.pos.w))
-      local o_y2=(o.pos.y+(o.pos.h))
-      
-      if x_new < o_x2 and
-             x_new + (e.pos.w) > o_x1 and
-             y_new < o_y2 and
-             y_new + (e.pos.h)> o_y1
-             then
-       xhit = true
-       yhit = true
-
-       if e.has('coll') and o.has('coll') then
-        add(e.coll.collidedwith,o)
-        add(o.coll.collidedwith,e)
-       end
-
-      end
-     end
-    end
-
-    -- update position
-    if xhit == false then
-     obj.x = x_new
-    end
-    if yhit == false then
-     obj.y = y_new
-    end
+function weapon:update(e,w)
+ if e:has('intention') then
+  if e.intention.o then
+   if self.lastfired > self.rate then
+    -- create a new bullet entity
+    add(w,entity:create({
+     sprite    = sprite:create({ number=60, spritesinsheet = 1 }),
+     position  = position:create({ x = 30, y=30, w=2, h=2, angle=90, velocity=4 }),
+     collision = collision:create({ isdestroyed=true })
+    }))
+    self.lastfired = 0
+   end
   end
-
-  return obj
+ end
+ self.lastfired = self.lastfired + 1
 end
+
+------------
+-- collision
+------------
+
+collision = {}
+collision.__index = collision
+
+function collision:create(props)
+    local this = {}
+    local props = props or {}
+    this.isdestroyed = props.isdestroyed or false
+    this.destroys = props.destroys or false
+    this.collisiondamage = props.collisiondamage or 0
+    this.collidedwith = {}
+
+    setmetatable(this, collision)
+    return this
+end
+
+function collision:update(e,w)
+ for c in all(collidedwith) do
+  --if e:has('battle') and o.collision.destroys then
+  --end
+ end
+ self.collidedwith = {}
+end
+
+------------
+-- game loop
+------------
 
 function _init()
- -- p1 entity
- add(world, entity({
-  pos      = pos(),
-  int      = int(),
-  sprite   = sprite(),
-  controls = controls({ p = 0 }),
-  cam      = camera(),
-  anim     = anim(),
-  battle   = battle(),
-  weapon   = weapon(),
-  coll     = collision()
- }))
 
- -- p2 entity
- add(world, entity({
-  pos      = pos({ y = 50, x = 50 }),
-  int      = int(),
-  sprite   = sprite({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
-  controls = controls({ p = 1 }),
-  cam      = camera({ x = 64 }),
-  anim     = anim(),
-  battle   = battle(),
-  weapon   = weapon(),
-  coll     = collision()
- }))
+  -- player 1
+  add(world,entity:create({
+    sprite    = sprite:create(),
+    animation = animation:create(),
+    position  = position:create(),
+    controls  = controls:create(),
+    intention = intention:create(),
+    camera    = camera:create(),
+    battle    = battle.create(),
+    weapon    = weapon.create(),
+    collision = collision.create()
+  }))
 
- -- crate entity
- add(world, entity({
-  pos      = pos({ x = 150, y=20 }),
-  cam      = camera({ x=48, y=48, w=4, h=4  }),
-  sprite   = sprite({ number = 48, spritesinsheet = 1 }),
-  anim     = anim({ animspeed = 8, movementanim = 'always', frames = 2 }),
-  coll    = collision()
- }))
+  -- player 2
+  add(world,entity:create({
+    sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+    animation = animation:create(),
+    position  = position:create({ x = 50, y = 50 }),
+    controls  = controls:create({ p = 1 }),
+    intention = intention:create(),
+    camera    = camera:create({ x = 64 }),
+    battle    = battle.create(),
+    weapon    = weapon.create(),
+    collision = collision.create()
+  }))
 
- -- bullet entity
- add(world, entity({
-  pos      = pos({ x = 30, y=30, w=2, h=2, angle=90, velocity=4 }),
-  sprite   = sprite({ number = 60, spritesinsheet = 1 }),
-  coll    = collision({ isdestroyed = true })
- }))
 end
 
 function _update()
  for e in all(world) do
-  e.update(world)
+  e:update(e,world)
  end
 end
 
 function _draw()
  cls()
- rectfill(0,0,127,127,9)
  for e in all(world) do
-  if e.has('cam') then
-   e.cam.update(e,world)
+  if e:has('camera') then
+   e.camera:update(e,world)
   end
  end
 end
+
 __gfx__
 00000000000000000888800008800000088880000088800008888000088800000888800000088000088880000880000008888000008880000888800008880000
 00000000088008800888800008888000088ff000088f800008ff800008f880000ff88000088880000888800008888000088ff000088f800008ff800008f88000
