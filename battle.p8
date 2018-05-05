@@ -6,6 +6,11 @@ __lua__
 -- battle
 -- by rik
 
+-- todo
+-- bullets need damage (collision component)
+-- bullets need owner (top-level entity)
+-- bullets need range (physics component)
+
 world={}
 
 -----------
@@ -465,9 +470,41 @@ function weapon:update(e,w)
   if e.intention.o then
    if self.lastfired > self.rate then
     -- create a new bullet entity
+
+    -- calculate angle
+
+    local xpos = 0
+    local ypos = 0
+
+    if e.position.angle == 0 then
+     xpos = e.position.x + e.position.w/2
+     ypos = e.position.y - 2
+    elseif e.position.angle == 45 then
+     xpos = e.position.x + e.position.w
+     ypos = e.position.y - 2
+    elseif e.position.angle == 90 then
+     xpos = e.position.x + e.position.w
+     ypos = e.position.y + e.position.h/2
+    elseif e.position.angle == 135 then
+     xpos = e.position.x + e.position.w
+     ypos = e.position.y + e.position.h
+    elseif e.position.angle == 180 then
+     xpos = e.position.x + e.position.w/2
+     ypos = e.position.y + e.position.h
+    elseif e.position.angle == 225 then
+     xpos = e.position.x
+     ypos = e.position.y + e.position.h
+    elseif e.position.angle == 270 then
+     xpos = e.position.x -2
+     ypos = e.position.y + e.position.h/2
+    elseif e.position.angle == 315 then
+     xpos = e.position.x -2
+     ypos = e.position.y -2
+    end
+
     add(w,entity:create({
      sprite    = sprite:create({ number=60, spritesinsheet = 1 }),
-     position  = position:create({ x = 30, y=30, w=2, h=2, angle=90, velocity=4 }),
+     position  = position:create({ x = xpos, y=ypos, w=2, h=2, angle=e.position.angle, velocity=4 }),
      collision = collision:create({ isdestroyed=true })
     }))
     self.lastfired = 0
