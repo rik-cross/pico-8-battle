@@ -2,14 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
 
-
 -- battle
 -- by rik
-
--- todo
--- bullets need damage (collision component)
--- bullets need owner (top-level entity)
--- bullets need range (physics component)
 
 world={}
 
@@ -45,11 +39,6 @@ end
 
 function entity:update(e,w)
 
-  -- delete entities
-  if e.del then
-    del(w,e)
-  end
-
   -- control system
   if e:has('controls') and e:has('position') and e:has('intention') then
    e.controls:update(e)
@@ -73,6 +62,11 @@ function entity:update(e,w)
   -- animation system
   if e:has('animation') then
    e.animation:update(e)
+  end
+
+  -- delete entities
+  if e.del then
+    del(w,e)
   end
 
 end
@@ -149,6 +143,8 @@ function position:create(props)
     this.angle     = props.angle or 180
     this.moving    = props.moving or false
     this.velocity  = props.velocity or 0
+    this.ranged    = props.ranged or false
+    this.range     = props.range or 0
 
     setmetatable(this, position)
     return this
@@ -160,6 +156,13 @@ self.moving = false
 
 local x_new = self.x
 local y_new = self.y
+
+if e.position.ranged and e.position.range - e.position.speed < 1 then
+ e.del = true
+ do return end
+end
+
+e.position.range -= e.position.speed
 
 if e:has('intention') then
 
@@ -284,7 +287,6 @@ for o in all(w) do
 
    if e:has('collision') and o:has('collision') then
     add(e.collision.collidedwith,o)
-    add(o.collision.collidedwith,e)
    end
 
   end
@@ -404,6 +406,7 @@ function camera:update(e,w)
    rect(self.x,self.y,self.x+(self.w*8)-1,self.y+(self.h*8)-1,13)
 
    if e:has('battle') then
+
     for hearts=0,e.battle.lives - 1 do
      if self.x < 64 then
       spr(1,self.x+5+(10*(hearts)),(self.y*8)+(self.h*8)-10)
@@ -411,6 +414,18 @@ function camera:update(e,w)
       spr(1,self.x+(self.w*5)+(10*(hearts)),(self.y*8)+(self.h*8)-10)
      end
     end
+
+    pal(8,5)
+
+    for hearts=e.battle.lives,1 do
+     if self.x < 64 then
+      spr(1,self.x+5+(10*(hearts)),(self.y*8)+(self.h*8)-10)
+     else
+      spr(1,self.x+(self.w*5)+(10*(hearts)),(self.y*8)+(self.h*8)-10)
+     end
+    end
+
+    pal()
 
     local startx = 0
     local starty = 0
@@ -421,7 +436,9 @@ function camera:update(e,w)
      startx = self.x + (self.w*8) - 3
      starty = (self.y + self.h*8) - 2
     end
-    rectfill(startx,starty,startx + 1, starty - (((self.h*8)-3) / 100 * e.battle.health),8)
+    if e.battle.health > 0 then
+     rectfill(startx,starty,startx + 1, starty - (((self.h*8)-3) / 100 * e.battle.health),8)
+    end
    end
 
  end
@@ -460,6 +477,7 @@ function weapon:create(props)
     this.rate      = props.rate or 10
     this.lastfired = 0
     this.speed     = props.speed or 2
+    this.range     = props.range or 15
 
     setmetatable(this, weapon)
     return this
@@ -477,26 +495,26 @@ function weapon:update(e,w)
     local ypos = 0
 
     if e.position.angle == 0 then
-     xpos = e.position.x + e.position.w/2
-     ypos = e.position.y - 2
+     xpos = e.position.x + e.position.w/2 - 1
+     ypos = e.position.y - e.position.speed
     elseif e.position.angle == 45 then
      xpos = e.position.x + e.position.w
      ypos = e.position.y - 2
     elseif e.position.angle == 90 then
-     xpos = e.position.x + e.position.w
-     ypos = e.position.y + e.position.h/2
+     xpos = e.position.x + e.position.w + e.position.speed
+     ypos = e.position.y + e.position.h/2 - 1
     elseif e.position.angle == 135 then
      xpos = e.position.x + e.position.w
      ypos = e.position.y + e.position.h
     elseif e.position.angle == 180 then
-     xpos = e.position.x + e.position.w/2
-     ypos = e.position.y + e.position.h
+     xpos = e.position.x + e.position.w/2 - 1
+     ypos = e.position.y + e.position.h + e.position.speed
     elseif e.position.angle == 225 then
      xpos = e.position.x
      ypos = e.position.y + e.position.h
     elseif e.position.angle == 270 then
-     xpos = e.position.x -2
-     ypos = e.position.y + e.position.h/2
+     xpos = e.position.x - e.position.speed
+     ypos = e.position.y + e.position.h/2 - 1
     elseif e.position.angle == 315 then
      xpos = e.position.x -2
      ypos = e.position.y -2
@@ -504,8 +522,14 @@ function weapon:update(e,w)
 
     add(w,entity:create({
      sprite    = sprite:create({ number=60, spritesinsheet = 1 }),
-     position  = position:create({ x = xpos, y=ypos, w=2, h=2, angle=e.position.angle, velocity=4 }),
-     collision = collision:create({ isdestroyed=true })
+     position  = position:create({
+        x = xpos, y=ypos,
+        w=2, h=2,
+        angle=e.position.angle,
+        velocity=4,
+        ranged=true, range=e.weapon.range
+      }),
+     collision = collision:create({ isdestroyed=true, collisiondamage=e.weapon.damage })
     }))
     self.lastfired = 0
    end
@@ -534,11 +558,23 @@ function collision:create(props)
 end
 
 function collision:update(e,w)
- for c in all(collidedwith) do
-  --if e:has('battle') and o.collision.destroys then
-  --end
+ for c in all(self.collidedwith) do
+  if c:has('battle') then
+   c.battle.health -= self.collisiondamage
+   if c.battle.health < 1 then
+    c.battle.lives -= 1
+    if c.battle.lives < 1 then
+     del(w,c)
+    else
+     c.battle.health = 100
+    end
+   end
+  end
+  if self.isdestroyed then
+   e.del = true
+  end
+  del(self.collidedwith,c)
  end
- self.collidedwith = {}
 end
 
 ------------
@@ -551,13 +587,13 @@ function _init()
   add(world,entity:create({
     sprite    = sprite:create(),
     animation = animation:create(),
-    position  = position:create(),
+    position  = position:create({ x=50, y=20, angle=180 }),
     controls  = controls:create(),
     intention = intention:create(),
     camera    = camera:create(),
-    battle    = battle.create(),
-    weapon    = weapon.create(),
-    collision = collision.create()
+    battle    = battle:create(),
+    weapon    = weapon:create(),
+    collision = collision:create()
   }))
 
   -- player 2
@@ -568,9 +604,9 @@ function _init()
     controls  = controls:create({ p = 1 }),
     intention = intention:create(),
     camera    = camera:create({ x = 64 }),
-    battle    = battle.create(),
-    weapon    = weapon.create(),
-    collision = collision.create()
+    battle    = battle:create(),
+    weapon    = weapon:create(),
+    collision = collision:create()
   }))
 
 end
