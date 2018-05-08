@@ -6,7 +6,9 @@ __lua__
 -- by rik
 
 -- todo
--- randomise table when finding new spawn/powerup point
+-- implement other powerups
+-- multiple game loop
+-- tidy code
 
 world      = {}
 spawn      = {}
@@ -164,39 +166,41 @@ self.moving = false
 local x_new = self.x
 local y_new = self.y
 
+local speed = self.speed
 if e.player == true and e:has('powerup') and e.powerup.type == 0 then
+ speed = speed + 1
 end
 
-if self.ranged and self.range - self.speed < 1 then
+if self.ranged and self.range - speed < 1 then
  e.del = true
  do return end
 end
 
-self.range -= self.speed
+self.range -= speed
 
 if e:has('intention') then
 
   -- if entity wants to move up
   if (e.intention.u) then
-    y_new = self.y - self.speed
+    y_new = self.y - speed
     self.moving = true
   end
 
   -- if entity wants to move down
   if (e.intention.d) then
-    y_new = self.y + self.speed
+    y_new = self.y + speed
     self.moving = true
   end
 
   -- if entity wants to move up
   if (e.intention.l) then
-    x_new = self.x - self.speed
+    x_new = self.x - speed
     self.moving = true
   end
 
   -- if entity wants to move up
   if (e.intention.r) then
-    x_new = self.x + self.speed
+    x_new = self.x + speed
     self.moving = true
   end
 
@@ -500,7 +504,7 @@ function weapon:create(props)
     this.damage    = props.damage or 25
     this.rate      = props.rate or 10
     this.lastfired = 0
-    this.speed     = props.speed or 2
+    this.speed     = props.speed or 4
     this.range     = props.range or 15
 
     setmetatable(this, weapon)
@@ -518,30 +522,35 @@ function weapon:update(e,w)
     local xpos = 0
     local ypos = 0
 
+    speed = e.position.speed
+    if e.player == true and e:has('powerup') and e.powerup.type == 0 then
+     speed = speed + 1
+    end
+
     if e.position.angle == 0 then
      xpos = e.position.x + e.position.w/2 - 1
-     ypos = e.position.y - e.position.w/2 - e.position.speed
+     ypos = e.position.y - e.position.w/2 - speed
     elseif e.position.angle == 45 then
-     xpos = e.position.x + e.position.w/2 + e.position.speed
-     ypos = e.position.y - e.position.w/2 - e.position.speed
+     xpos = e.position.x + e.position.w/2 + speed
+     ypos = e.position.y - e.position.w/2 - speed
     elseif e.position.angle == 90 then
-     xpos = e.position.x + e.position.w + e.position.speed
+     xpos = e.position.x + e.position.w + speed
      ypos = e.position.y + e.position.h/2 - 1
     elseif e.position.angle == 135 then
-     xpos = e.position.x + e.position.w + e.position.speed
-     ypos = e.position.y + e.position.h/2 + e.position.speed
+     xpos = e.position.x + e.position.w + speed
+     ypos = e.position.y + e.position.h/2 + speed
     elseif e.position.angle == 180 then
      xpos = e.position.x + e.position.w/2 -1
-     ypos = e.position.y + e.position.h + e.position.speed
+     ypos = e.position.y + e.position.h + speed
     elseif e.position.angle == 225 then
      xpos = e.position.x - e.position.w/2 - 1
-     ypos = e.position.y + e.position.h/2 + e.position.speed
+     ypos = e.position.y + e.position.h/2 + speed
     elseif e.position.angle == 270 then
-     xpos = e.position.x - e.position.w/2 - e.position.speed
+     xpos = e.position.x - e.position.w/2 - speed
      ypos = e.position.y + e.position.h/2 - 1
     elseif e.position.angle == 315 then
-     xpos = e.position.x - e.position.w/2 - e.position.speed
-     ypos = e.position.y - e.position.h/2 - e.position.speed
+     xpos = e.position.x - e.position.w/2 - speed
+     ypos = e.position.y - e.position.h/2 - speed
     end
 
     add(w,entity:create({
@@ -550,7 +559,7 @@ function weapon:update(e,w)
         x = xpos, y=ypos,
         w=2, h=2,
         angle=e.position.angle,
-        velocity=4,
+        velocity=e.weapon.speed,
         ranged=true, range=e.weapon.range
       }),
      collision = collision:create({ isdestroyed=true, collisiondamage=e.weapon.damage })
@@ -574,8 +583,8 @@ function powerup:create(props)
     local this = {}
     local props = props or {}
 
-    this.type       = props.type or 0
-    this.owner      = props.owner or nil
+    this.type          = props.type or 0
+    this.timeremaining = 100
 
     setmetatable(this, powerup)
     return this
@@ -635,7 +644,7 @@ function collision:update(e,w)
 end
 
 function findfreeloc(structure,w)
- for pos in all(structure) do
+ for pos in all(shuffle(structure)) do
   local found = true
   for e in all(w) do
    local x1=e.position.x
@@ -674,6 +683,7 @@ function powerupsystem:update(w)
  for e in all(w) do
   if e:has('powerup') and e.player == false then
    powerupfound = true
+   self.next = 200
   end
  end
 
@@ -685,7 +695,7 @@ function powerupsystem:update(w)
 
   local px, py = findfreeloc(poweruppos,w)
 
-  local ptype = flr(rnd(7))
+  local ptype = 0 -- flr(rnd(7))
   local snum = ptype + 48 + (2*ptype) - ptype
 
   add(w,entity:create({
@@ -699,12 +709,24 @@ function powerupsystem:update(w)
 
  end
 
- --for e in all(w) do
-  --if e.player == true and e:has('powerup') then
-   --if e.powerup.type == 0 then  end
-  --end
- --end
+ for e in all(w) do
+  if e.player == true and e:has('powerup') then
+   e.powerup.timeremaining -= 1
+   if e.powerup.timeremaining < 1 then
+    e.powerup = nil
+   end
+  end
+ end
 
+end
+
+function shuffle(structure)
+ local count = #structure
+ for i=count,2,-1 do
+  local j = flr(rnd(i))+1
+  structure[i], structure[j] = structure[j], structure[i]
+ end
+ return structure
 end
 
 ------------
