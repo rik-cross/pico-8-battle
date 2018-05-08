@@ -740,22 +740,20 @@ function _init()
  while (not btn(4) and 
        not btn(5)) do
  
-  print('by rik-x',4,4)
-  spr(64,48,48,4,2)
-  spr(68,20,48,2,2)
+  spr(64,48,38,4,2)
+  spr(68,20,38,2,2)
   pal(1,5)
   pal(8,14)
   pal(12,3)
   pal(15,4)
-  spr(68,92,48,2,2,1)
+  spr(68,92,38,2,2,1)
   pal()
-  print('  ⬆️     ',16,74)
-  print('⬅️⬇️➡️ c ',16,80)
-
-  print('     e  ',78,74)
-  print('w  s d f',78,80)
- 
-  print('press any key',38,100)
+  print('  ⬆️     ',16,64,6)
+  print('⬅️⬇️➡️ c ',16,70,6)
+  print('     e  ',78,64,6)
+  print('w  s d f',78,70,6)
+  print('press any key',38,90,6)
+  print('by rik-x',4,118,14)
  
  end
 
