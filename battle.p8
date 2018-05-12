@@ -107,7 +107,7 @@ function position:create(props)
     this.y         = props.y or 10
     this.w         = props.w or 6
     this.h         = props.h or 8
-    this.speed     = props.speed or 1
+    this.speed     = props.speed or 7
     this.angle     = props.angle or 180
     this.moving    = props.moving or false
     this.velocity  = props.velocity or 0
@@ -387,35 +387,63 @@ function physicssystem:update(w)
 
   -- map hittest
 
-  local xhit = false
+  local xhit
+  local x1
+  local y1
+  local x2
+  local x2
+  local xa
+  local xb
+  local xc
+  local xd
+  repeat
+    xhit = false
 
-  local x1=x_new/8
-  local y1=e.position.y/8
-  local x2=(x_new+(e.position.w-1))/8
-  local y2=(e.position.y+(e.position.h-1))/8
-  local xa=fget(mget(x1,y1),0)
-  local xb=fget(mget(x1,y2),0)
-  local xc=fget(mget(x2,y2),0)
-  local xd=fget(mget(x2,y1),0)
+    x1=x_new/8
+    y1=e.position.y/8
+    x2=(x_new+(e.position.w-1))/8
+    y2=(e.position.y+(e.position.h-1))/8
+    xa=fget(mget(x1,y1),0)
+    xb=fget(mget(x1,y2),0)
+    xc=fget(mget(x2,y2),0)
+    xd=fget(mget(x2,y1),0)
 
-  if xa or xb or xc or xd then
-   xhit = true
-  end
+    if xa or xb or xc or xd then
+     xhit = true
+     if e.position.angle > 0 and e.position.angle < 180 then
+      x_new -= 1
+     else
+      x_new += 1
+     end
+    end
+  until(xhit==false or (x_new == e.position.x))
 
-  local yhit = false
+ local yhit
+ local ya
+ local yb
+ local yc
+ local yd
+ repeat
+  yhit = false
 
   x1=e.position.x/8
   y1=y_new/8
   x2=(e.position.x+(e.position.w-1))/8
   y2=(y_new+(e.position.h-1))/8
-  local ya=fget(mget(x1,y1),0)
-  local yb=fget(mget(x1,y2),0)
-  local yc=fget(mget(x2,y2),0)
-  local yd=fget(mget(x2,y1),0)
+  ya=fget(mget(x1,y1),0)
+  yb=fget(mget(x1,y2),0)
+  yc=fget(mget(x2,y2),0)
+  yd=fget(mget(x2,y1),0)
 
   if ya or yb or yc or yd then
    yhit = true
+   if e.position.angle > 90 and e.position.angle < 270 then
+    y_new -= 1
+   else
+    y_new += 1
+   end
   end
+ until(yhit==false or (y_new == e.position.y))
 
   if (yhit or xhit) and e:has('collision') then
    if e.collision.isdestroyed then
@@ -431,11 +459,7 @@ function physicssystem:update(w)
     local o_x2=(o.position.x+(o.position.w))
     local o_y2=(o.position.y+(o.position.h))
 
-    if x_new < o_x2 and
-           x_new + (e.position.w) > o_x1 and
-           y_new < o_y2 and
-           y_new + (e.position.h)> o_y1
-           then
+    if x_new < o_x2 and x_new + (e.position.w) > o_x1 and y_new < o_y2 and y_new + (e.position.h)> o_y1 then
      xhit = true
      yhit = true
 
@@ -447,6 +471,7 @@ function physicssystem:update(w)
      end
 
     end
+
    end
   end
 
