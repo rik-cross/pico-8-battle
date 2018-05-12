@@ -6,9 +6,12 @@ __lua__
 -- by rik
 
 -- todo
--- implement other powerups
--- multiple game loop
+-- fix bullets 'collecting' powerups
+-- if collision + speed then move entity until it's next to colliding thing
+-- implement all powerups
 -- tidy code
+-- multiple game loop
+-- sound and music
 
 world      = {}
 spawn      = {}
@@ -44,40 +47,6 @@ end
 
 function entity:has(key)
   return self[key] ~= nil
-end
-
-function entity:update(e,w)
-
-  -- control system
-  if e:has('controls') and e:has('position') and e:has('intention') then
-   e.controls:update(e)
-  end
-
-  -- weapon system
-  if e:has('weapon') then
-   e.weapon:update(e, w)
-  end
-
-  -- physics system
-  if e:has('position') then
-   e.position:update(e, w)
-  end
-
-  -- collision system
-  if e:has('collision') then
-   e.collision:update(e, w)
-  end
-
-  -- animation system
-  if e:has('animation') then
-   e.animation:update(e)
-  end
-
-  -- delete entities
-  if e.del then
-    del(w,e)
-  end
-
 end
 
 ---------
@@ -120,19 +89,6 @@ function animation:create(props)
     return this
 end
 
-function animation:update(e)
- if (self.animtype == 'always') or self.animtype == 'movement_only' and e.position.moving then
-  self.timeoncurrent += 1
-  if self.timeoncurrent > self.animspeed then
-   e.sprite.currentnumber += e.sprite.spritesinsheet
-   if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * self.frames) then
-    e.sprite.currentnumber = e.sprite.number
-   end
-   self.timeoncurrent = 0
-  end
- end
-end
-
 -----------
 -- position
 -----------
@@ -159,163 +115,6 @@ function position:create(props)
     return this
 end
 
-function position:update(e,w)
-
-self.moving = false
-
-local x_new = self.x
-local y_new = self.y
-
-local speed = self.speed
-if e.player == true and e:has('powerup') and e.powerup.type == 0 then
- speed = speed + 1
-end
-
-if self.ranged and self.range - speed < 1 then
- e.del = true
- do return end
-end
-
-self.range -= speed
-
-if e:has('intention') then
-
-  -- if entity wants to move up
-  if (e.intention.u) then
-    y_new = self.y - speed
-    self.moving = true
-  end
-
-  -- if entity wants to move down
-  if (e.intention.d) then
-    y_new = self.y + speed
-    self.moving = true
-  end
-
-  -- if entity wants to move up
-  if (e.intention.l) then
-    x_new = self.x - speed
-    self.moving = true
-  end
-
-  -- if entity wants to move up
-  if (e.intention.r) then
-    x_new = self.x + speed
-    self.moving = true
-  end
-
-  if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
-   self.angle = 0
-  elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
-   self.angle = 45
-  elseif not e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
-   self.angle = 90
-  elseif not e.intention.u and e.intention.d and not e.intention.l and e.intention.r then
-   self.angle = 135
-  elseif not e.intention.u and e.intention.d and not e.intention.l and not e.intention.r then
-   self.angle = 180
-  elseif not e.intention.u and e.intention.d and e.intention.l and not e.intention.r then
-   self.angle = 225
-  elseif not e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
-   self.angle = 270
-  elseif e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
-   self.angle = 315
-  end
-
-end
-
-if (self.angle > 0 and self.angle < 180) then
- x_new += self.velocity
-end
-if (self.angle > 180 and self.angle < 360) then
- x_new -= self.velocity
-end
-if (self.angle > 270 or self.angle < 90) then
- y_new -= self.velocity
-end
-if (self.angle < 270 and self.angle > 90) then
- y_new += self.velocity
-end
-
-if e:has('intention') then
-  -- reset player intention
-  e.intention.u = false
-  e.intention.d = false
-  e.intention.l = false
-  e.intention.r = false
-end
-
--- map hittest
-
-local xhit = false
-
-local x1=x_new/8
-local y1=self.y/8
-local x2=(x_new+(self.w-1))/8
-local y2=(self.y+(self.h-1))/8
-local xa=fget(mget(x1,y1),0)
-local xb=fget(mget(x1,y2),0)
-local xc=fget(mget(x2,y2),0)
-local xd=fget(mget(x2,y1),0)
-
-if xa or xb or xc or xd then
- xhit = true
-end
-
-local yhit = false
-
-x1=self.x/8
-y1=y_new/8
-x2=(self.x+(self.w-1))/8
-y2=(y_new+(self.h-1))/8
-local ya=fget(mget(x1,y1),0)
-local yb=fget(mget(x1,y2),0)
-local yc=fget(mget(x2,y2),0)
-local yd=fget(mget(x2,y1),0)
-
-if ya or yb or yc or yd then
- yhit = true
-end
-
-if (yhit or xhit) and e:has('collision') then
- if e.collision.isdestroyed then
-  e.del = true
- end
-end
-
--- other entity hittest
-for o in all(w) do
- if o ~= e and o:has('position') then
-  local o_x1=o.position.x
-  local o_y1=o.position.y
-  local o_x2=(o.position.x+(o.position.w))
-  local o_y2=(o.position.y+(o.position.h))
-
-  if x_new < o_x2 and
-         x_new + (e.position.w) > o_x1 and
-         y_new < o_y2 and
-         y_new + (e.position.h)> o_y1
-         then
-   xhit = true
-   yhit = true
-
-   if e:has('collision') and o:has('collision') then
-    add(e.collision.collidedwith,o)
-   end
-
-  end
- end
-end
-
--- update position
-if xhit == false then
- self.x = x_new
-end
-if yhit == false then
- self.y = y_new
-end
-end
-
 -----------
 -- controls
 -----------
@@ -337,15 +136,6 @@ function controls:create(props)
 
     setmetatable(this, controls)
     return this
-end
-
-function controls:update(e)
-  e.intention.l = btn(self.l, self.p)
-  e.intention.r = btn(self.r, self.p)
-  e.intention.u = btn(self.u, self.p)
-  e.intention.d = btn(self.d, self.p)
-  e.intention.o = btn(self.o, self.p)
-  e.intention.x = btn(self.x, self.p)
 end
 
 ------------
@@ -393,84 +183,6 @@ function camera:create(props)
     return this
 end
 
-function camera:update(e,w)
-
- rectfill(self.x,self.y,self.x+(self.w*8)-1,self.y+(self.h*8)-1,0)
-
- local map_x = e.camera.x + (e.camera.w*8)/2 - e.position.x - e.position.w/2
- local map_y = e.camera.y + (e.camera.h*8)/2 - e.position.y - e.position.h/2
-
- if self.shake then
-  map_x += rnd(4) - 2
-  map_y += rnd(4) - 2
-  self.shakeremaining -= 1
-  if self.shakeremaining < 1 then
-   self.shake = false
-   self.shakeremaining = 6
-  end
- end
-
- clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
-
- map(0,0,map_x,map_y)
-
- for o in all(w) do
-  if o:has('position') and o:has('sprite') then
-
-      -- use sprite palette info to recolour sprite
-      -- (arrys start at 1)
-      for c=0,15 do
-       pal(c,o.sprite.recolour[c+1])
-      end
-
-      spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
-    end
-    pal()
-   end
-
-   clip()
-
-   -- camera border
-   rect(self.x,self.y,self.x+(self.w*8)-1,self.y+(self.h*8)-1,13)
-
-   if e:has('battle') then
-
-    for hearts=0,e.battle.lives - 1 do
-     if self.x < 64 then
-      spr(1,self.x+5+(10*(hearts)),(self.y*8)+(self.h*8)-10)
-     else
-      spr(1,self.x+(self.w*5)+(10*(hearts)),(self.y*8)+(self.h*8)-10)
-     end
-    end
-
-    pal(8,5)
-
-    for hearts=e.battle.lives,1 do
-     if self.x < 64 then
-      spr(1,self.x+5+(10*(hearts)),(self.y*8)+(self.h*8)-10)
-     else
-      spr(1,self.x+(self.w*5)+(10*(hearts)),(self.y*8)+(self.h*8)-10)
-     end
-    end
-
-    pal()
-
-    local startx = 0
-    local starty = 0
-    if self.x < 64 then
-     startx = self.x + 1
-     starty = (self.y + self.h*8) - 2
-    else
-     startx = self.x + (self.w*8) - 3
-     starty = (self.y + self.h*8) - 2
-    end
-    if e.battle.health > 0 then
-     rectfill(startx,starty,startx + 1, starty - (((self.h*8)-3) / 100 * e.battle.health),8)
-    end
-   end
-
- end
-
 ---------
 -- battle
 ---------
@@ -511,67 +223,6 @@ function weapon:create(props)
     return this
 end
 
-function weapon:update(e,w)
- if e:has('intention') then
-  if e.intention.o then
-   if self.lastfired > self.rate then
-    -- create a new bullet entity
-
-    -- calculate angle
-
-    local xpos = 0
-    local ypos = 0
-
-    speed = e.position.speed
-    if e.player == true and e:has('powerup') and e.powerup.type == 0 then
-     speed = speed + 1
-    end
-
-    if e.position.angle == 0 then
-     xpos = e.position.x + e.position.w/2 - 1
-     ypos = e.position.y - e.position.w/2 - speed
-    elseif e.position.angle == 45 then
-     xpos = e.position.x + e.position.w/2 + speed
-     ypos = e.position.y - e.position.w/2 - speed
-    elseif e.position.angle == 90 then
-     xpos = e.position.x + e.position.w + speed
-     ypos = e.position.y + e.position.h/2 - 1
-    elseif e.position.angle == 135 then
-     xpos = e.position.x + e.position.w + speed
-     ypos = e.position.y + e.position.h/2 + speed
-    elseif e.position.angle == 180 then
-     xpos = e.position.x + e.position.w/2 -1
-     ypos = e.position.y + e.position.h + speed
-    elseif e.position.angle == 225 then
-     xpos = e.position.x - e.position.w/2 - 1
-     ypos = e.position.y + e.position.h/2 + speed
-    elseif e.position.angle == 270 then
-     xpos = e.position.x - e.position.w/2 - speed
-     ypos = e.position.y + e.position.h/2 - 1
-    elseif e.position.angle == 315 then
-     xpos = e.position.x - e.position.w/2 - speed
-     ypos = e.position.y - e.position.h/2 - speed
-    end
-
-    add(w,entity:create({
-     sprite    = sprite:create({ number=62, spritesinsheet = 1 }),
-     position  = position:create({
-        x = xpos, y=ypos,
-        w=2, h=2,
-        angle=e.position.angle,
-        velocity=e.weapon.speed,
-        ranged=true, range=e.weapon.range
-      }),
-     collision = collision:create({ isdestroyed=true, collisiondamage=e.weapon.damage })
-    }))
-    sfx(0)
-    self.lastfired = 0
-   end
-  end
- end
- self.lastfired = self.lastfired + 1
-end
-
 ----------
 -- powerup
 ----------
@@ -584,7 +235,7 @@ function powerup:create(props)
     local props = props or {}
 
     this.type          = props.type or 0
-    this.timeremaining = 100
+    this.timeremaining = 300
 
     setmetatable(this, powerup)
     return this
@@ -609,40 +260,6 @@ function collision:create(props)
     return this
 end
 
-function collision:update(e,w)
- for c in all(self.collidedwith) do
-
-  if e.player == true and c:has('powerup') and c.player == false then
-   e.powerup = c.powerup
-  end
-
-  if e.player == true and c.collision.isdestroyed then
-   c.del = true
-  end
-
-  if c:has('battle') and self.collisiondamage > 0 then
-   c.camera.shake = true
-   c.battle.health -= self.collisiondamage
-   if c.battle.health < 1 then
-    c.battle.lives -= 1
-    if c.battle.lives < 1 then
-     del(w,c)
-    else
-     local xnew, ynew = findfreeloc(spawn,w)
-     c.position.x = xnew + 1
-     c.position.y = ynew
-     c.battle.health = 100
-    end
-   end
-   sfx(1)
-  end
-  if self.isdestroyed then
-   e.del = true
-  end
-  del(self.collidedwith,c)
- end
-end
-
 function findfreeloc(structure,w)
  for pos in all(shuffle(structure)) do
   local found = true
@@ -662,9 +279,583 @@ function findfreeloc(structure,w)
  end
 end
 
-----------------
--- powerupsystem
-----------------
+-----------------
+-- physics system
+-----------------
+
+physicssystem = {}
+physicssystem.__index = physicssystem
+
+function physicssystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, physicssystem)
+    return this
+end
+
+function physicssystem:update(w)
+ for e in all(world) do
+  if e:has('position') then
+  e.position.moving = false
+
+  local x_new = e.position.x
+  local y_new = e.position.y
+
+  local speed = e.position.speed
+  if e.player == true and e:has('powerup') and e.powerup.type == 0 then
+   speed = speed + 1
+  end
+
+  if e.position.ranged and e.position.range - speed < 1 then
+   e.del = true
+   do return end
+  end
+
+  e.position.range -= speed
+
+  if e:has('intention') then
+
+    -- if entity wants to move up
+    if (e.intention.u) then
+      y_new = e.position.y - speed
+      e.position.moving = true
+    end
+
+    -- if entity wants to move down
+    if (e.intention.d) then
+      y_new = e.position.y + speed
+      e.position.moving = true
+    end
+
+    -- if entity wants to move up
+    if (e.intention.l) then
+      x_new = e.position.x - speed
+      e.position.moving = true
+    end
+
+    -- if entity wants to move up
+    if (e.intention.r) then
+      x_new = e.position.x + speed
+      e.position.moving = true
+    end
+
+    if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
+     e.position.angle = 0
+    elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+     e.position.angle = 45
+    elseif not e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+     e.position.angle = 90
+    elseif not e.intention.u and e.intention.d and not e.intention.l and e.intention.r then
+     e.position.angle = 135
+    elseif not e.intention.u and e.intention.d and not e.intention.l and not e.intention.r then
+     e.position.angle = 180
+    elseif not e.intention.u and e.intention.d and e.intention.l and not e.intention.r then
+     e.position.angle = 225
+    elseif not e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+     e.position.angle = 270
+    elseif e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+     e.position.angle = 315
+    end
+
+  end
+
+  if (e.position.angle > 0 and e.position.angle < 180) then
+   x_new += e.position.velocity
+  end
+  if (e.position.angle > 180 and e.position.angle < 360) then
+   x_new -= e.position.velocity
+  end
+  if (e.position.angle > 270 or e.position.angle < 90) then
+   y_new -= e.position.velocity
+  end
+  if (e.position.angle < 270 and e.position.angle > 90) then
+   y_new += e.position.velocity
+  end
+
+  if e:has('intention') then
+    -- reset player intention
+    e.intention.u = false
+    e.intention.d = false
+    e.intention.l = false
+    e.intention.r = false
+  end
+
+  -- map hittest
+
+  local xhit = false
+
+  local x1=x_new/8
+  local y1=e.position.y/8
+  local x2=(x_new+(e.position.w-1))/8
+  local y2=(e.position.y+(e.position.h-1))/8
+  local xa=fget(mget(x1,y1),0)
+  local xb=fget(mget(x1,y2),0)
+  local xc=fget(mget(x2,y2),0)
+  local xd=fget(mget(x2,y1),0)
+
+  if xa or xb or xc or xd then
+   xhit = true
+  end
+
+  local yhit = false
+
+  x1=e.position.x/8
+  y1=y_new/8
+  x2=(e.position.x+(e.position.w-1))/8
+  y2=(y_new+(e.position.h-1))/8
+  local ya=fget(mget(x1,y1),0)
+  local yb=fget(mget(x1,y2),0)
+  local yc=fget(mget(x2,y2),0)
+  local yd=fget(mget(x2,y1),0)
+
+  if ya or yb or yc or yd then
+   yhit = true
+  end
+
+  if (yhit or xhit) and e:has('collision') then
+   if e.collision.isdestroyed then
+    e.del = true
+   end
+  end
+
+  -- other entity hittest
+  for o in all(w) do
+   if o ~= e and o:has('position') then
+    local o_x1=o.position.x
+    local o_y1=o.position.y
+    local o_x2=(o.position.x+(o.position.w))
+    local o_y2=(o.position.y+(o.position.h))
+
+    if x_new < o_x2 and
+           x_new + (e.position.w) > o_x1 and
+           y_new < o_y2 and
+           y_new + (e.position.h)> o_y1
+           then
+     xhit = true
+     yhit = true
+
+     if e:has('collision') and o:has('collision') then
+      add(e.collision.collidedwith,o)
+      -- wouldn't have to do this with separate
+      -- systems not tied to a particular entity
+      add(o.collision.collidedwith,e)
+     end
+
+    end
+   end
+  end
+
+  -- update position
+  if xhit == false then
+   e.position.x = x_new
+  end
+  if yhit == false then
+   e.position.y = y_new
+  end
+  end
+ end
+end
+
+-----------------
+-- control system
+-----------------
+
+controlsystem = {}
+controlsystem.__index = controlsystem
+
+function controlsystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, controlsystem)
+    return this
+end
+
+function controlsystem:update(w)
+ for e in all(world) do
+  if e:has('controls') and e:has('position') and e:has('intention') then
+  e.intention.l = btn(e.controls.l, e.controls.p)
+  e.intention.r = btn(e.controls.r, e.controls.p)
+  e.intention.u = btn(e.controls.u, e.controls.p)
+  e.intention.d = btn(e.controls.d, e.controls.p)
+  e.intention.o = btn(e.controls.o, e.controls.p)
+  e.intention.x = btn(e.controls.x, e.controls.p)
+  end
+ end
+end
+
+-----------------
+-- battle system
+-----------------
+
+battlesystem = {}
+battlesystem.__index = battlesystem
+
+function battlesystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, battlesystem)
+    return this
+end
+
+function battlesystem:update(w)
+ for e in all(w) do
+  if e:has('battle') then
+  if e:has('powerup') and e.player == true and e.powerup.type == 6 then
+   e.battle.health += 1
+   if e.battle.health > 99 and e.battle.lives < 2 then
+    e.battle.lives += 1
+    e.battle.health = 1
+   end
+   if e.battle.health > 99 and e.battle.lives > 1 then
+    e.powerup = nil
+   end
+  end
+  end
+ end
+end
+
+-----------------
+-- weapon system
+-----------------
+
+weaponsystem = {}
+weaponsystem.__index = weaponsystem
+
+function weaponsystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, weaponsystem)
+    return this
+end
+
+function weaponsystem:update(w)
+ for e in all(world) do
+  if e:has('weapon') then
+  if e:has('intention') then
+   if e.intention.o then
+    local rate = e.weapon.rate
+    if e:has('powerup') and e.powerup.type == 1 then
+     rate = rate / 2
+    end
+    if e.weapon.lastfired > rate then
+     -- create a new bullet entity
+
+     -- calculate angle
+
+     local xpos = 0
+     local ypos = 0
+
+     speed = e.position.speed
+     if e.player == true and e:has('powerup') and e.powerup.type == 0 then
+      speed = speed + 1
+     end
+
+     local side
+     if e.player == true and e:has('powerup') and e.powerup.type == 5 then
+
+     if e.position.angle == 0 then
+      xpos = e.position.x + e.position.w/2 - 2
+      ypos = e.position.y + e.position.h + speed
+     elseif e.position.angle == 45 then
+      xpos = e.position.x - e.position.w/2 - 2
+      ypos = e.position.y + speed + 2
+     elseif e.position.angle == 90 then
+      xpos = e.position.x - e.position.w/2 - speed - 2
+      ypos = e.position.y + e.position.h/2 - 2
+     elseif e.position.angle == 135 then
+      xpos = e.position.x - e.position.w/2 - speed - 2
+      ypos = e.position.y - e.position.h/2 - speed - 2
+     elseif e.position.angle == 180 then
+      xpos = e.position.x + e.position.w/2 -2
+      ypos = e.position.y - e.position.h/2 - speed - 2
+     elseif e.position.angle == 225 then
+      xpos = e.position.x + e.position.w + 2
+      ypos = e.position.y - speed - 2
+     elseif e.position.angle == 270 then
+      xpos = e.position.x + e.position.w + 2
+      ypos = e.position.y + e.position.h/2 - 2
+     elseif e.position.angle == 315 then
+      xpos = e.position.x + e.position.w + 2
+      ypos = e.position.y + e.position.h + 2
+     end
+
+     else
+
+     if e.position.angle == 0 then
+      xpos = e.position.x + e.position.w/2 - 1
+      ypos = e.position.y - e.position.h/2 - speed
+     elseif e.position.angle == 45 then
+      xpos = e.position.x + e.position.w/2 + speed
+      ypos = e.position.y - e.position.h/2 - speed
+     elseif e.position.angle == 90 then
+      xpos = e.position.x + e.position.w + speed
+      ypos = e.position.y + e.position.h/2 - 1
+     elseif e.position.angle == 135 then
+      xpos = e.position.x + e.position.w + speed
+      ypos = e.position.y + e.position.h/2 + speed
+     elseif e.position.angle == 180 then
+      xpos = e.position.x + e.position.w/2 -1
+      ypos = e.position.y + e.position.h + speed
+     elseif e.position.angle == 225 then
+      xpos = e.position.x - e.position.w/2 - 1
+      ypos = e.position.y + e.position.h/2 + speed
+     elseif e.position.angle == 270 then
+      xpos = e.position.x - e.position.w/2 - speed
+      ypos = e.position.y + e.position.h/2 - 1
+     elseif e.position.angle == 315 then
+      xpos = e.position.x - e.position.w/2 - speed
+      ypos = e.position.y - e.position.h/2 - speed
+     end
+
+     end
+
+     local damage
+     if e:has('powerup') and e.player == true and e.powerup.type == 4 then
+      damage = 100
+     else
+      damage = e.weapon.damage
+     end
+
+     local range = e.weapon.range
+     if e:has('powerup') and e.player == true and e.powerup.type == 3 then
+      range = range * 2
+     end
+
+     local vel = e.weapon.speed
+     local size = 2
+     local spritenumber = 62
+     local r = true
+     if e:has('powerup') and e.player == true and e.powerup.type == 5 then
+      vel = 0
+      spritenumber = 63
+      r = false
+      size = 4
+      damage = 100
+     end
+
+     add(w,entity:create({
+      sprite    = sprite:create({ number=spritenumber, spritesinsheet = 1 }),
+      position  = position:create({
+         x = xpos, y=ypos,
+         w=size, h=size,
+         angle=e.position.angle,
+         velocity=vel,
+         ranged=r, range=range
+       }),
+      collision = collision:create({ isdestroyed=true, collisiondamage=damage })
+     }))
+     sfx(0)
+     e.weapon.lastfired = 0
+    end
+   end
+  end
+  e.weapon.lastfired = e.weapon.lastfired + 1
+  end
+ end
+end
+
+-------------------
+-- animation system
+-------------------
+
+animationsystem = {}
+animationsystem.__index = animationsystem
+
+function animationsystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, animationsystem)
+    return this
+end
+
+function animationsystem:update(w)
+ for e in all(w) do
+  if e:has('animation') then
+  if (e.animation.animtype == 'always') or e.animation.animtype == 'movement_only' and e.position.moving then
+   e.animation.timeoncurrent += 1
+   if e.animation.timeoncurrent > e.animation.animspeed then
+    e.sprite.currentnumber += e.sprite.spritesinsheet
+    if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * e.animation.frames) then
+     e.sprite.currentnumber = e.sprite.number
+    end
+    e.animation.timeoncurrent = 0
+   end
+  end
+  end
+ end
+end
+
+-------------------
+-- collision system
+-------------------
+
+collisionsystem = {}
+collisionsystem.__index = collisionsystem
+
+function collisionsystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, collisionsystem)
+    return this
+end
+
+function collisionsystem:update(w)
+ for e in all(w) do
+  if e:has('collision') then
+  for c in all(e.collision.collidedwith) do
+
+   if e.player == true and c:has('powerup') and c.player == false then
+    e.powerup = c.powerup
+   end
+
+   if e.player == true and c.collision.isdestroyed then
+    c.del = true
+   end
+
+   if c:has('battle') and e.collision.collisiondamage > 0 then
+    c.camera.shake = true
+    c.battle.health -= e.collision.collisiondamage
+    if c.battle.health < 1 then
+     c.battle.lives -= 1
+     if c.battle.lives < 1 then
+      del(w,c)
+     else
+      local xnew, ynew = findfreeloc(spawn,w)
+      c.position.x = xnew + 1
+      c.position.y = ynew
+      c.battle.health = 100
+     end
+    end
+    sfx(1)
+   end
+   if self.isdestroyed then
+    -- don't let bullet 'get' powerup
+    -- does this work?
+    if (e:has('powerup') and e.player == false and c.player == false) or
+     (c:has('powerup') and c.player == false and e.player == false) then
+     e.del = false
+    else
+     e.del = true
+    end
+   end
+   del(e.collision.collidedwith,c)
+  end
+  end
+ end
+end
+
+------------------
+-- graphics system
+------------------
+
+graphicssystem = {}
+graphicssystem.__index = graphicssystem
+
+function graphicssystem:create(props)
+    local this = {}
+    local props = props or {}
+
+    setmetatable(this, graphicssystem)
+    return this
+end
+
+function graphicssystem:update(w)
+ cls()
+ for e in all(w) do
+
+ if e:has('camera') then
+
+  rectfill(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,0)
+
+  local map_x = e.camera.x + (e.camera.w*8)/2 - e.position.x - e.position.w/2
+  local map_y = e.camera.y + (e.camera.h*8)/2 - e.position.y - e.position.h/2
+
+  if e.camera.shake then
+   map_x += rnd(4) - 2
+   map_y += rnd(4) - 2
+   e.camera.shakeremaining -= 1
+   if e.camera.shakeremaining < 1 then
+    e.camera.shake = false
+    e.camera.shakeremaining = 6
+   end
+  end
+
+  clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
+
+  map(0,0,map_x,map_y)
+
+  for o in all(w) do
+   if o:has('position') and o:has('sprite') then
+
+       -- use sprite palette info to recolour sprite
+       -- (arrys start at 1)
+       for c=0,15 do
+        pal(c,o.sprite.recolour[c+1])
+       end
+
+       spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
+     end
+     pal()
+    end
+
+    clip()
+
+    -- camera border
+    rect(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,13)
+
+    if e:has('battle') then
+
+     for hearts=0,e.battle.lives - 1 do
+      if e.camera.x < 64 then
+       spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
+      else
+       spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
+      end
+     end
+
+     pal(8,5)
+
+     for hearts=e.battle.lives,1 do
+      if e.camera.x < 64 then
+       spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
+      else
+       spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
+      end
+     end
+
+     pal()
+
+     local startx = 0
+     local starty = 0
+     if e.camera.x < 64 then
+      startx = e.camera.x + 1
+      starty = (e.camera.y + e.camera.h*8) - 2
+     else
+      startx = e.camera.x + (e.camera.w*8) - 3
+      starty = (e.camera.y + e.camera.h*8) - 2
+     end
+     if e.battle.health > 0 then
+      rectfill(startx,starty,startx + 1, starty - (((e.camera.h*8)-3) / 100 * e.battle.health),8)
+     end
+    end
+
+    if e:has('powerup') and e.player == true then
+     spr(48 + e.powerup.type + (2*e.powerup.type) - e.powerup.type, e.camera.x + e.camera.w*4 - 4 , e.camera.y + e.camera.h*8 - 10)
+    end
+
+ end
+ end
+end
+
+-----------------
+-- powerup system
+-----------------
 
 powerupsystem = {}
 powerupsystem.__index = powerupsystem
@@ -672,7 +863,7 @@ powerupsystem.__index = powerupsystem
 function powerupsystem:create(props)
     local this = {}
     local props = props or {}
-    this.next = props.next or 200
+    this.next = props.next or 300
 
     setmetatable(this, powerupsystem)
     return this
@@ -683,7 +874,7 @@ function powerupsystem:update(w)
  for e in all(w) do
   if e:has('powerup') and e.player == false then
    powerupfound = true
-   self.next = 200
+   self.next = 300
   end
  end
 
@@ -695,7 +886,7 @@ function powerupsystem:update(w)
 
   local px, py = findfreeloc(poweruppos,w)
 
-  local ptype = 0 -- flr(rnd(7))
+  local ptype = 5 -- flr(rnd(2))
   local snum = ptype + 48 + (2*ptype) - ptype
 
   add(w,entity:create({
@@ -735,11 +926,15 @@ end
 
 function _init()
 
+ ---------------
+ -- start screen
+ ---------------
+
  cls(2)
 
- while (not btn(4) and 
+ while (not btn(4) and
        not btn(5)) do
- 
+
   spr(64,48,38,4,2)
   spr(68,20,38,2,2)
   pal(1,5)
@@ -754,10 +949,21 @@ function _init()
   print('w  s d f',78,70,6)
   print('press any key',38,90,6)
   print('by rik-x',4,118,14)
- 
+
  end
 
+ -------------
+ -- start game
+ -------------
+
  ps = powerupsystem:create()
+ phys = physicssystem:create()
+ gs = graphicssystem:create()
+ cs = collisionsystem:create()
+ as = animationsystem:create()
+ ws = weaponsystem:create()
+ bs = battlesystem:create()
+ cts = controlsystem:create()
 
   -- go through map and find
   -- spawn and powerup points
@@ -812,23 +1018,23 @@ end
 
 function _update()
 
- for e in all(world) do
-  e:update(e,world)
- end
-
  ps:update(world)
+ phys:update(world)
+ cs:update(world)
+ as:update(world)
+ ws:update(world)
+ bs:update(world)
+ cts:update(world)
+
+ -- delete entities
+ for e in all(world) do
+  if e.del then del(world,e) end
+ end
 
 end
 
 function _draw()
- cls()
-
- for e in all(world) do
-  if e:has('camera') then
-   e.camera:update(e,world)
-  end
- end
-
+ gs:update(world)
 end
 
 __gfx__
@@ -848,14 +1054,14 @@ __gfx__
 0f11100001f10000018110000011f000011f100001f1100001111000011f100001f110000f1100000181100000111f0001f11000011f10000111100001f11000
 01111000011c00000111100000c1100001111000011c00000111100000c1100001111000011c0000011110000001100001111000011000000111100000111000
 00c0c000010000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000000c000000c100000c0c000000c00000c00000000c00000
-08888000000880006666666677776777ffff7fff44454445bbbbbbbbccccccccaaaaaaaa44444444777777779999999966000000000000001111711188887888
-0ff8800008888000666666666666666666667f6644454445bbbbbbbb7cccccc7aaaaaaaa44444444757775779999999966000000000000006666716666667866
-0ff180000f888000666666666777777766667f6644454445bbbbbbbbc7cccc7caaaaaaaa44444444555755579999999900000000000000006666716666667866
-011180000ff1800066666666666666667777777755554445bbbbbbbbccccccccaaaaaaaa444444447577757799aaaa9900000000000000007777777777777777
-01f180000111800066666666777767777fffffff44454445bbbbbbbbccccccccaaaaaaaa444444447777777799aaaa9900000000000000007111111178888888
-011f1000f111000066666666666666667f66666644454445bbbbbbbbccc77cccaaaaaaaa444444447775777599aaaa9900000000000000007166666678666666
-011110000110000066666666677777777f66666644454445bbbbbbbbcc7cc7ccaaaaaaaa444444445755575599aaaa9900000000000000007166666678666666
-0c0c000001c0000066666666666666667777777744455555bbbbbbbbccccccccaaaaaaaa444444447775777599aaaa9900000000000000007777777777777777
+08888000000880006666666677776777ffff6fff44454445bbbbbbbbccccccccaaaaaaaa4444444477777777999999996600000000000000ffff1fffffff8fff
+0ff8800008888000666666666666666677776f7744454445bbbbbbbb7cccccc7aaaaaaaa444444447677767799999999660000000000000077771f7777778f77
+0ff180000f888000666666666777777777776f7744454445bbbbbbbbc7cccc7caaaaaaaa444444446667666799999999000000000000000077771f7777778f77
+011180000ff1800066666666666666666666666655554445bbbbbbbbccccccccaaaaaaaa444444447677767799aaaa9900000000000000001111111188888888
+01f180000111800066666666777767776fffffff44454445bbbbbbbbccccccccaaaaaaaa444444447777777799aaaa9900000000000000001fffffff8fffffff
+011f1000f111000066666666666666666f77777744454445bbbbbbbbccc77cccaaaaaaaa444444447776777699aaaa9900000000000000001f7777778f777777
+011110000110000066666666677777776f77777744454445bbbbbbbbcc7cc7ccaaaaaaaa444444446766676699aaaa9900000000000000001f7777778f777777
+0c0c000001c0000066666666666666666666666644455555bbbbbbbbccccccccaaaaaaaa444444447776777699aaaa9900000000000000001111111188888888
 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555500000055550000
 57447445564464455774444556644445544444455444444557774445566644455744447556444465544444455444444554444445544444455500000056650000
 54744745546446455744444556444445544744455446444557744445566444455474474554644645545555455455554557744775566446650000000056650000
