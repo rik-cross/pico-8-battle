@@ -6,7 +6,6 @@ __lua__
 -- by rik
 
 -- todo
--- fix bullets 'collecting' powerups
 -- if collision + speed then move entity until it's next to colliding thing
 -- implement all powerups
 -- tidy code
@@ -47,6 +46,10 @@ end
 
 function entity:has(key)
   return self[key] ~= nil
+end
+
+function entity:removepowerup()
+ this.powerup = nil
 end
 
 ---------
@@ -236,6 +239,7 @@ function powerup:create(props)
 
     this.type          = props.type or 0
     this.timeremaining = 300
+    this.numberleft    = props.numberleft
 
     setmetatable(this, powerup)
     return this
@@ -435,10 +439,10 @@ function physicssystem:update(w)
      xhit = true
      yhit = true
 
-     if e:has('collision') and o:has('collision') then
+     if e:has('collision') then
       add(e.collision.collidedwith,o)
-      -- wouldn't have to do this with separate
-      -- systems not tied to a particular entity
+     end
+     if o:has('collision') then
       add(o.collision.collidedwith,e)
      end
 
@@ -650,6 +654,14 @@ function weaponsystem:update(w)
      }))
      sfx(0)
      e.weapon.lastfired = 0
+
+     if e:has('powerup') then
+      e.powerup.numberleft -= 1
+      if e.powerup.numberleft < 1 then
+       e.powerup = nil
+      end
+     end
+
     end
    end
   end
@@ -700,7 +712,6 @@ collisionsystem.__index = collisionsystem
 function collisionsystem:create(props)
     local this = {}
     local props = props or {}
-
     setmetatable(this, collisionsystem)
     return this
 end
@@ -708,44 +719,41 @@ end
 function collisionsystem:update(w)
  for e in all(w) do
   if e:has('collision') then
-  for c in all(e.collision.collidedwith) do
 
-   if e.player == true and c:has('powerup') and c.player == false then
-    e.powerup = c.powerup
-   end
-
-   if e.player == true and c.collision.isdestroyed then
-    c.del = true
-   end
-
-   if c:has('battle') and e.collision.collisiondamage > 0 then
-    c.camera.shake = true
-    c.battle.health -= e.collision.collisiondamage
-    if c.battle.health < 1 then
-     c.battle.lives -= 1
-     if c.battle.lives < 1 then
-      del(w,c)
-     else
-      local xnew, ynew = findfreeloc(spawn,w)
-      c.position.x = xnew + 1
-      c.position.y = ynew
-      c.battle.health = 100
-     end
+   for c in all(e.collision.collidedwith) do
+    if e.player == true and c:has('powerup') and c.player == false then
+     e.powerup = c.powerup
+     c.powerup = nil
+     c.del = true
     end
-    sfx(1)
-   end
-   if self.isdestroyed then
-    -- don't let bullet 'get' powerup
-    -- does this work?
-    if (e:has('powerup') and e.player == false and c.player == false) or
-     (c:has('powerup') and c.player == false and e.player == false) then
-     e.del = false
-    else
+
+    if c:has('powerup') and c.player == false and e.collision.isdestroyed then
      e.del = true
     end
+
+    if e.player == true and c:has('collision') and c.collision.isdestroyed then
+     c.del = true
+    end
+
+    if c:has('battle') and e.collision.collisiondamage > 0 then
+     c.camera.shake = true
+     c.battle.health -= e.collision.collisiondamage
+     if c.battle.health < 1 then
+      c.battle.lives -= 1
+      if c.battle.lives < 1 then
+       del(w,c)
+      else
+       local xnew, ynew = findfreeloc(spawn,w)
+       c.position.x = xnew + 1
+       c.position.y = ynew
+       c.battle.health = 100
+      end
+     end
+     sfx(1)
+    end
+
    end
-   del(e.collision.collidedwith,c)
-  end
+
   end
  end
 end
@@ -849,7 +857,12 @@ function graphicssystem:update(w)
      spr(48 + e.powerup.type + (2*e.powerup.type) - e.powerup.type, e.camera.x + e.camera.w*4 - 4 , e.camera.y + e.camera.h*8 - 10)
     end
 
+    if e.player and e:has('powerup') then
+     print(e.powerup.numberleft,e.camera.x + e.camera.w*4 + 6 , e.camera.y + e.camera.h*8 - 10 ,6)
+    end
+
  end
+
  end
 end
 
@@ -871,6 +884,7 @@ end
 
 function powerupsystem:update(w)
  local powerupfound = false
+
  for e in all(w) do
   if e:has('powerup') and e.player == false then
    powerupfound = true
@@ -889,13 +903,16 @@ function powerupsystem:update(w)
   local ptype = 5 -- flr(rnd(2))
   local snum = ptype + 48 + (2*ptype) - ptype
 
+  local nl
+  if ptype == 5 then nl=3 else nl=1000 end
+
   add(w,entity:create({
    sprite      = sprite:create({ number=snum, spritesinsheet=1 }),
    animation   = animation:create({ frames=2, animspeed=6, movementanim='always' }),
    position    = position:create({ x=px, y=py, w=8 }),
    camera      = camera:create({ x=52, y=100, w=3, h=3 }),
    collision   = collision:create({ isdestroyed=true }),
-   powerup     = powerup:create({  type=ptype })
+   powerup     = powerup:create({  type=ptype, numberleft=nl })
   }))
 
  end
@@ -956,7 +973,6 @@ function _init()
  -- start game
  -------------
 
- ps = powerupsystem:create()
  phys = physicssystem:create()
  gs = graphicssystem:create()
  cs = collisionsystem:create()
@@ -964,6 +980,7 @@ function _init()
  ws = weaponsystem:create()
  bs = battlesystem:create()
  cts = controlsystem:create()
+ ps = powerupsystem:create()
 
   -- go through map and find
   -- spawn and powerup points
@@ -1011,20 +1028,20 @@ function _init()
     camera    = camera:create({ x = 64 }),
     battle    = battle:create(),
     weapon    = weapon:create(),
-    collision = collision:create()
+    collision = collision:create(),
   }))
 
 end
 
 function _update()
 
- ps:update(world)
  phys:update(world)
  cs:update(world)
  as:update(world)
  ws:update(world)
  bs:update(world)
  cts:update(world)
+ ps:update(world)
 
  -- delete entities
  for e in all(world) do
