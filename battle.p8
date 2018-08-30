@@ -1,41 +1,79 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
+-- constants / helper functions
 
+-- do i have a memory leak by not destroying
+-- items removed from a list?
 
--- colour names/numbers
-colours = {
- black      = 0,
- darkblue   = 1,
- maroon     = 2,
- darkgreen  = 3,
- brown      = 4,
- darkgrey   = 5,
- lightgrey  = 6,
- white      = 7,
- red        = 8,
- orange     = 9,
- yellow     = 10,
- lightgreen = 11,
- lightblue  = 12,
- mauve      = 13,
- pink       = 14,
- beige      = 15
+-- powerups
+powerups = {
+ speed  = 1,
+ bouncy = 2,
+ rapid  = 3,
+ long   = 4,
+ damage = 5,
+ mines  = 6,
+ health = 7
 }
 
--- sounds and music
-sounds = {
- a = 0,
- b = 1,
- c = 2,
- d = 3,
- e = 4
-}
-
--- play a sound by name
-function playsound(sound)
- sfx(sounds[sound])
+function getpowerup(powerupname)
+ return powerups[powerupname]
 end
+
+function resetentity(e)
+ e.position.x, e.position.y = findfreeloc(leveldata[level].spawn,world)
+ e.camera.shake          = false
+ e.camera.shakeremaining = 6
+ e.battle.lives = 2
+ e.battle.health = e.battle.maxhealth
+end
+
+function shuffle(structure)
+ for i = #structure,2,-1 do
+  local j = flr(rnd(i))+1
+  structure[i], structure[j] = structure[j], structure[i]
+ end
+ return structure
+end
+
+function recolour(palette)
+ for c=0,15 do
+  pal(c,palette[c+1])
+ end
+end
+
+function numberofplayers()
+ local n = 0
+ for e in all(world) do
+  if (e.player) n += 1
+ end
+ return n
+end
+
+function isplaying(num)
+ for e in all(world) do
+  if e.playernum == num then
+   return true
+  end
+ end
+ return false
+end
+
+-->8
+-- f
+-->8
+-- f
+-->8
+-- f
+-->8
+-- f
+-->8
+-- f
+-->8
+-- f
+
+-- playing = {p1=true,p2=true,p3=false,p4=false}
 
 partlist = {}
 
@@ -61,9 +99,7 @@ function updatepart()
    p.y+=p.dy
    p.t=3
   end
-  if p.s < 1 then
-   del(partlist,p)
-  end
+  if (p.s < 1) del(partlist,p)
   p.t-=1
  end
 end
@@ -76,6 +112,7 @@ function state:create(props)
  local this = {}
  local props = props or {}
  this.next = props.next or nil
+ this.prev = props.prev or nil
  this.time = props.time or 0
  this.timeremaining = this.time
  setmetatable(this, state)
@@ -84,6 +121,7 @@ end
 
 -- keeps track and updates
 -- a list of states
+
 statemanager = {}
 statemanager.__index = statemanager
 
@@ -92,7 +130,6 @@ function statemanager:create(props)
  local props = props or {}
  this.current = nil
  this.next = props.next or {}
- --this.previous = nil
  this.frame = 0
  setmetatable(this, statemanager)
  return this
@@ -118,22 +155,34 @@ end
 
 world      = {}
 
-wins = {p1=0,p2=0}
-
 raindata = {}
 raindata.targetrainlevel = 0
 raindata.currentrainlevel = 0
 raindata.timeuntilnextlevel = 0
 raindata.rainlist = {60,10,0}
 
-playersalive = 2
+--playersalive = 2
 animstate = 0
 
-level = 1
 --{name = "abandoned house", colour = 1, map_colour = 6, map_topx = 0, map_topy = 0, map_width = 32, map_height = 32, spawn = {}, poweruppos = {}, rain=false},
-leveldata = {
- {name = "gardens", colour = 9, map_colour = 3, map_topx = 32, map_topy = 0, map_width = 32, map_height = 32, spawn = {}, poweruppos = {}, rain=true}
-}
+
+level = 1
+leveldata = {}
+
+l1            = {}
+l1.name       = "gardens"
+l1.colour     = 7
+l1.map_colour = 3
+l1.map_topx   = 32
+l1.map_topy   = 0
+l1.map_width  = 32
+l1.map_height = 32
+l1.spawn      = {}
+l1.poweruppos = {}
+l1.rain       = true
+
+add(leveldata,l1)
+add(leveldata,l1)
 
 -----------
 -- entities
@@ -147,6 +196,8 @@ function entity:create(props)
   local props = props or {}
 
   this.player    = props.player or false
+  this.playernum = props.playernum or 0
+  this.colour    = props.colour or 0
   this.del       = false
   this.sprite    = props.sprite
   this.animation = props.animation
@@ -165,10 +216,6 @@ end
 
 function entity:has(key)
   return self[key] ~= nil
-end
-
-function entity:removepowerup()
- this.powerup = nil
 end
 
 ---------
@@ -375,6 +422,7 @@ collision.__index = collision
 function collision:create(props)
     local this = {}
     local props = props or {}
+
     this.isdestroyed = props.isdestroyed or false
     this.destroys = props.destroys or false
     this.collisiondamage = props.collisiondamage or 0
@@ -394,13 +442,11 @@ function findfreeloc(structure,w)
    local x2=(e.position.x+(e.position.w))
    local y2=(e.position.y+(e.position.h))
 
-   if pos[1] < x2 and pos[1] + 8 > x1 and pos[2] < y2 and pos[2] + 8 > y1 then
-    found = false
-   end
+   if (pos[1] < x2 and pos[1] + 8 > x1 and pos[2] < y2 and pos[2] + 8 > y1) found = false
+
   end
-  if found == true then
-   return pos[1], pos[2]
-  end
+  -- +1 as entity width is only 6, not 8
+  if (found) return pos[1]+1, pos[2]
  end
 end
 
@@ -428,9 +474,7 @@ function physicssystem:update(w)
   local y_new = e.position.y
 
   local speed = e.position.speed
-  if e.player == true and e:has('powerup') and e.powerup.type == 0 then
-   speed = speed + 1
-  end
+  if (e.player and e:has('powerup') and e.powerup.type == 0) speed = speed + 1
 
   if e.position.ranged and e.position.range - speed < 1 then
    e.del = true
@@ -508,15 +552,15 @@ function physicssystem:update(w)
 
   -- map hittest
 
-  local xhit
-  local x1
-  local y1
-  local x2
-  local x2
-  local xa
-  local xb
-  local xc
-  local xd
+  local xhit, x1, y1, x2, y2, a, xb, xc, xd
+  --local x1
+  --local y1
+  --local x2
+  --local y2
+  --local xa
+  --local xb
+  --local xc
+  --local xd
   repeat
     xhit = false
 
@@ -538,8 +582,6 @@ function physicssystem:update(w)
      end
     end
   until(xhit==false or (x_new == e.position.x))
-
-  --xt = fget(mget(x1,y1),1) or fget(mget(x1,y2),1) or fget(mget(x2,y2),1) or fget(mget(x2,y1),1)
 
  local yhit
  local ya
@@ -567,8 +609,6 @@ function physicssystem:update(w)
    end
   end
  until(yhit==false or (y_new == e.position.y))
-
-  --yt = fget(mget(x1,y1),1) or fget(mget(x1,y2),1) or fget(mget(x2,y2),1) or fget(mget(x2,y1),1)
 
   if (yhit or xhit) and e:has('collision') then
    if e.collision.isdestroyed then
@@ -662,7 +702,7 @@ end
 function battlesystem:update(w)
  for e in all(w) do
   if e:has('battle') then
-  if e:has('powerup') and e.player == true and e.powerup.type == 6 then
+  if e:has('powerup') and e.player and e.powerup.type == 6 then
    e.battle.health += 1
    if e.battle.health > 99 and e.battle.lives < 2 then
     e.battle.lives += 1
@@ -712,12 +752,11 @@ function weaponsystem:update(w)
      local y1=0
 
      speed = e.position.speed
-     if e.player == true and e:has('powerup') and e.powerup.type == 0 then
+     if e.player and e:has('powerup') and e.powerup.type == 0 then
       speed = speed + 1
      end
 
-     local side
-     if e.player == true and e:has('powerup') and e.powerup.type == 5 then
+     if e.player and e:has('powerup') and e.powerup.type == 5 then
 
      if e.position.angle == 0 then
       xpos = e.position.x + e.position.w/2 - 2
@@ -800,14 +839,14 @@ function weaponsystem:update(w)
      end
 
      local damage
-     if e:has('powerup') and e.player == true and e.powerup.type == 4 then
+     if e:has('powerup') and e.player and e.powerup.type == 4 then
       damage = 100
      else
       damage = e.weapon.damage
      end
 
      local range = e.weapon.range
-     if e:has('powerup') and e.player == true and e.powerup.type == 3 then
+     if e:has('powerup') and e.player and e.powerup.type == 3 then
       range = range * 2
      end
 
@@ -815,7 +854,7 @@ function weaponsystem:update(w)
      local size = 2
      local spritenumber = 62
      local r = true
-     if e:has('powerup') and e.player == true and e.powerup.type == 5 then
+     if e:has('powerup') and e.player and e.powerup.type == 5 then
       vel = 0
       spritenumber = 63
       r = false
@@ -825,7 +864,7 @@ function weaponsystem:update(w)
 
      local b = false
      local isd = true
-     if e:has('powerup') and e.player == true and e.powerup.type == 2 then
+     if e:has('powerup') and e.player and e.powerup.type == 2 then
       b = true
       isd = false
      end
@@ -877,7 +916,7 @@ end
 function animationsystem:update(w)
  for e in all(w) do
   if e:has('animation') then
-  if (e.animation.animtype == 'always') or e.animation.animtype == 'movement_only' and e.position.moving then
+  if (e.animation.animtype == 'always') or (e.animation.animtype == 'movement_only' and e.position.moving) then
    e.animation.timeoncurrent += 1
    if e.animation.timeoncurrent > e.animation.animspeed then
     e.sprite.currentnumber += e.sprite.spritesinsheet
@@ -910,7 +949,7 @@ function collisionsystem:update(w)
   if e:has('collision') then
 
    for c in all(e.collision.collidedwith) do
-    if e.player == true and c:has('powerup') and c.player == false then
+    if e.player and c:has('powerup') and c.player == false then
      sfx(3)
      e.powerup = c.powerup
      c.powerup = nil
@@ -921,7 +960,7 @@ function collisionsystem:update(w)
      e.del = true
     end
 
-    if e.player == true and c:has('collision') and c.collision.isdestroyed then
+    if e.player and c:has('collision') and c.collision.isdestroyed then
      c.del = true
     end
 
@@ -932,7 +971,7 @@ function collisionsystem:update(w)
       c.battle.lives -= 1
       if c.battle.lives < 1 then
        del(w,c)
-       playersalive -= 1
+       --playersalive -= 1
       else
        local xnew, ynew = findfreeloc(leveldata[level].spawn,w)
        c.position.x = xnew + 1
@@ -997,10 +1036,7 @@ function graphicssystem:update(w)
    if o:has('position') and o:has('sprite') then
 
        -- use sprite palette info to recolour sprite
-       -- (arrys start at 1)
-       for c=0,15 do
-        pal(c,o.sprite.recolour[c+1])
-       end
+       recolour(o.sprite.recolour)
 
        spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
      end
@@ -1008,8 +1044,6 @@ function graphicssystem:update(w)
     end
 
     -- black border to hide outside of current map
-    -- **might be better to just move player towards edge**
-    -- add leveldata x and y for future levels.
     -- top
     rectfill(e.camera.x,e.camera.y,e.camera.x+e.camera.w*8,(map_y+leveldata[level].map_topy*8)-1,leveldata[level].map_colour)
     -- bottom
@@ -1028,7 +1062,6 @@ function graphicssystem:update(w)
       raindata.timeuntilnextlevel = flr(rnd(2000))+3000
 
       if raindata.targetrainlevel == 0 then
-      -- diff = flr(abs(raindata.targetrainlevel-raindata.currentrainlevel)*200)
        music(-1,6000)
       else
        music(0,6000)
@@ -1063,9 +1096,7 @@ function graphicssystem:update(w)
      rain.f=3
      rain.t=3
      add(e.camera.rainlist,rain)
-     if rnd(1) > 0.9 then
-      break
-     end
+     if (rnd(1) > 0.9) break
     end
     for r in all(e.camera.rainlist) do
      r.t-=1
@@ -1144,7 +1175,7 @@ function graphicssystem:update(w)
      end
     end
 
-    if e:has('powerup') and e.player == true then
+    if e:has('powerup') and e.player then
      spr(48 + e.powerup.type + (2*e.powerup.type) - e.powerup.type, e.camera.x + e.camera.w*4 - 4 , e.camera.y + e.camera.h*8 - 10)
     end
 
@@ -1195,10 +1226,9 @@ function powerupsystem:update(w)
 
   local px, py = findfreeloc(leveldata[level].poweruppos,w)
 
-  local ptype = 2
-
+  local ptype = getpowerup("bouncy")
   -- bouncy bullets not implemented for now.
-  while ptype == 2 do
+  while ptype == getpowerup("bouncy") do
    ptype = flr(rnd(6))
   end
 
@@ -1212,7 +1242,7 @@ function powerupsystem:update(w)
    sprite      = sprite:create({ number=snum, spritesinsheet=1 }),
    animation   = animation:create({ frames=2, animspeed=6, movementanim='always' }),
    position    = position:create({ x=px, y=py, w=8 }),
-   camera      = camera:create({ x=52, y=100, w=3, h=3 }),
+   camera      = camera:create({ x=52, y=52, w=3, h=3 }),
    collision   = collision:create({ isdestroyed=true }),
    powerup     = powerup:create({  type=ptype, numberleft=nl })
   }))
@@ -1220,7 +1250,7 @@ function powerupsystem:update(w)
  end
 
  for e in all(w) do
-  if e.player == true and e:has('powerup') then
+  if e.player and e:has('powerup') then
    e.powerup.timeremaining -= 1
    if e.powerup.timeremaining < 1 then
     e.powerup = nil
@@ -1230,55 +1260,55 @@ function powerupsystem:update(w)
 
 end
 
-function shuffle(structure)
- local count = #structure
- for i=count,2,-1 do
-  local j = flr(rnd(i))+1
-  structure[i], structure[j] = structure[j], structure[i]
- end
- return structure
-end
-
 ------------
 -- game loop
 ------------
 
 function reset_game()
---reset game
--- todo -- this needs to also happen when user selects a new level.
--- in a separate function.
-world = {}
-add(world,p1)
-add(world,p2)
-p1.position.x, p1.position.y = findfreeloc(leveldata[level].spawn,world)
-p1.camera.shake          = false
-p1.camera.shakeremaining = 6
-p1.battle.lives = 2
-p1.battle.health = p1.battle.maxhealth
 
-p2.position.x, p2.position.y = findfreeloc(leveldata[level].spawn,world)
-p2.camera.shake          = false
-p2.camera.shakeremaining = 6
-p2.battle.lives = 2
-p2.battle.health = p2.battle.maxhealth
+ p1.camera.h = 8
+ p2.camera.h = 8
+ p3.camera.h = 8
+ p4.camera.h = 8
 
-playersalive = 2
+ if (isplaying(1) and (not isplaying(3))) p1.camera.h = 16
+ if (isplaying(2) and (not isplaying(4))) p2.camera.h = 16
+
+ if isplaying(3) and not isplaying(1) then
+  p3.camera.h = 16
+  p3.camera.y = 0
+ end
+
+ if isplaying(4) and not isplaying(2) then
+  p4.camera.h = 16
+  p4.camera.y = 0
+ end
+
+ --reset all players and remove all non-players
+ for e in all(world) do
+  if e.player then
+   resetentity(e)
+  else
+   del(world,e)
+  end
+ end
+
 end
+
+-->8
+-- init / update / draw
 
 function _init()
 
--------------
--- start game
--------------
-
-phys = physicssystem:create()
-gs = graphicssystem:create()
-cs = collisionsystem:create()
-as = animationsystem:create()
-ws = weaponsystem:create()
-bs = battlesystem:create()
-cts = controlsystem:create()
-ps = powerupsystem:create()
+ -- create systems
+ phys = physicssystem:create()
+ gs   = graphicssystem:create()
+ cs   = collisionsystem:create()
+ as   = animationsystem:create()
+ ws   = weaponsystem:create()
+ bs   = battlesystem:create()
+ cts  = controlsystem:create()
+ ps   = powerupsystem:create()
 
  -- go through map and find
  -- spawn and powerup points
@@ -1287,72 +1317,96 @@ ps = powerupsystem:create()
  local y = 0
 
  for l=1,#leveldata do
- for x=leveldata[l].map_topx, leveldata[l].map_topx+leveldata[l].map_width do
-  for y=leveldata[l].map_topy, leveldata[l].map_topy+leveldata[l].map_height do
-   if fget(mget(x,y),6) then
-    add(leveldata[l].spawn,{x*8,y*8})
-   end
-   if fget(mget(x,y),7) then
-    add(leveldata[l].poweruppos,{x*8,y*8})
+  for x=leveldata[l].map_topx, leveldata[l].map_topx+leveldata[l].map_width do
+   for y=leveldata[l].map_topy, leveldata[l].map_topy+leveldata[l].map_height do
+    if fget(mget(x,y),6) then
+     add(leveldata[l].spawn,{x*8,y*8})
+    end
+    if fget(mget(x,y),7) then
+     add(leveldata[l].poweruppos,{x*8,y*8})
+    end
    end
   end
  end
 
- end
-
- --local sx, sy = findfreeloc(leveldata[level].spawn,world)
-
- -- player 1
+ -- create player 1
  p1 = entity:create({
-   player    = true,
-   sprite    = sprite:create(),
-   animation = animation:create(),
-   position  = position:create({ }), -- x=sx+1, y=sy }),
-   controls  = controls:create(),
-   intention = intention:create(),
-   camera    = camera:create(),
-   battle    = battle:create(),
-   weapon    = weapon:create(),
-   collision = collision:create()
+  player    = true,
+  playernum = 1,
+  colour = 14,
+  sprite    = sprite:create(),
+  animation = animation:create(),
+  position  = position:create(),
+  controls  = controls:create(),
+  intention = intention:create(),
+  camera    = camera:create(),
+  battle    = battle:create(),
+  weapon    = weapon:create(),
+  collision = collision:create()
  })
- add(world,p1)
-
- --local sx2, sy2 = findfreeloc(leveldata[level].spawn,world)
 
  -- player 2
  p2 = entity:create({
-   player    = true,
-   sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
-   animation = animation:create(),
-   position  = position:create({ }), --x = sx2+1, y = sy2 }),
-   controls  = controls:create({ p = 1 }),
-   intention = intention:create(),
-   camera    = camera:create({ x = 64 }),
-   battle    = battle:create(),
-   weapon    = weapon:create(),
-   collision = collision:create(),
+  player    = true,
+  playernum = 2,
+  colour = 15,
+  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation = animation:create(),
+  position  = position:create(),
+  controls  = controls:create({ p = 1 }),
+  intention = intention:create(),
+  camera    = camera:create({ x = 64 }),
+  battle    = battle:create(),
+  weapon    = weapon:create(),
+  collision = collision:create(),
  })
- add(world,p2)
 
+ p3 = entity:create({
+  player    = true,
+  playernum = 3,
+  colour = 9,
+  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation = animation:create(),
+  position  = position:create(),
+  controls  = controls:create({ p = 2 }),
+  intention = intention:create(),
+  camera    = camera:create({ y = 64 }),
+  battle    = battle:create(),
+  weapon    = weapon:create(),
+  collision = collision:create(),
+ })
+
+ p4 = entity:create({
+  player    = true,
+  playernum = 4,
+  colour = 10,
+  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation = animation:create(),
+  position  = position:create(),
+  controls  = controls:create({ p = 3 }),
+  intention = intention:create(),
+  camera    = camera:create({ x = 64, y = 64 }),
+  battle    = battle:create(),
+  weapon    = weapon:create(),
+  collision = collision:create(),
+ })
+
+ -- create state manager
  stateman = statemanager:create()
 
+ -- create game states
+ -- and draw functions
  startstate = state:create({})
  function startstate:draw()
   cls(2)
   spr(64,48,min(38, -20 + stateman.frame * 3),4,2)
   spr(68,min(20, -50 + stateman.frame * 3),38,2,2)
-  pal(1,5)
-  pal(8,14)
-  pal(12,3)
-  pal(15,4)
+  recolour(p2.sprite.recolour)
   spr(68,max(92, 16*8+35 - stateman.frame * 3),38,2,2,1)
   pal()
-  spr(70,90,max(90, 200 - stateman.frame * 3))
-  spr(111,30,max(90, 200 - stateman.frame * 3))
-  print('instructions',10,max(100, 210 - stateman.frame * 3),6)
-  print('start',84,max(100, 210 - stateman.frame * 3),6)
-
-  print('by rik',4,118,14)
+  spr(70,115,max(115, 200 - stateman.frame * 3))
+  spr(111,5,max(115, 200 - stateman.frame * 3))
+  print('by rik',52,116,14)
  end
 
  startstateout = state:create({time=30})
@@ -1360,28 +1414,18 @@ ps = powerupsystem:create()
   cls(2)
   spr(64,48,max(38, 38 + stateman.frame * 10),4,2)
   spr(68,20,max(38, 38 + stateman.frame * 10),2,2)
-  pal(1,5)
-  pal(8,14)
-  pal(12,3)
-  pal(15,4)
+  recolour(p2.sprite.recolour)
   spr(68,92,max(38, 38 + stateman.frame * 10),2,2,1)
   pal()
-  --print('  ⬆️     ',16,max(64, 64 + stateman.frame * 10),6)
-  --print('⬅️⬇️➡️ c ',16, max(70, 70 + stateman.frame * 10),6)
-  --print('     e  ',78, max(64, 64 + stateman.frame * 10),6)
-  --print('w  s d f',78,max(70, 70 + stateman.frame * 10),6)
-  --print('by rik',4,max(118, 118 + stateman.frame * 10),14)
   spr(111,30,max(90, 90 + stateman.frame * 10))
-  print('instructions',10,max(100, 100 + stateman.frame * 10),6)
-  print('start',90,max(100, 100 + stateman.frame * 10),6)
   local offset = stateman.frame % 2
   if offset == 1 then
     if animstate == 0 then animstate = 1 else animstate = 0 end
   end
   if animstate == 1 then
-   spr(70,90,90)
+   spr(70,115,115)
   else
-   spr(71,90,90)
+   spr(71,115,115)
   end
  end
 
@@ -1390,29 +1434,66 @@ ps = powerupsystem:create()
   cls(2)
   spr(64,48,max(38, 38 + stateman.frame * 10),4,2)
   spr(68,20,max(38, 38 + stateman.frame * 10),2,2)
-  pal(1,5)
-  pal(8,14)
-  pal(12,3)
-  pal(15,4)
+  recolour(p2.sprite.recolour)
   spr(68,92,max(38, 38 + stateman.frame * 10),2,2,1)
   pal()
-  --print('  ⬆️     ',16,max(64, 64 + stateman.frame * 10),6)
-  --print('⬅️⬇️➡️ c ',16, max(70, 70 + stateman.frame * 10),6)
-  --print('     e  ',78, max(64, 64 + stateman.frame * 10),6)
-  --print('w  s d f',78,max(70, 70 + stateman.frame * 10),6)
-  --print('by rik',4,max(118, 118 + stateman.frame * 10),14)
   spr(70,90,max(90, 90 + stateman.frame * 10))
-  print('instructions',10,max(100, 100 + stateman.frame * 10),6)
-  print('start',90,max(100, 100 + stateman.frame * 10),6)
   local offset = stateman.frame % 2
   if offset == 1 then
     if animstate == 0 then animstate = 1 else animstate = 0 end
   end
   if animstate == 1 then
-   spr(111,30,90)
+   spr(111,5,115)
   else
-   spr(127,30,90)
+   spr(127,5,115)
   end
+ end
+
+ playerstate = state:create()
+ function playerstate:draw()
+  cls(2)
+  if isplaying(1) then
+   rectfill(25,10,57,55,p1.colour)
+   sspr(32,32,16,16,25,15,32,32)
+   spr(43,38,52)
+  else
+   rectfill(25,10,57,55,0)
+   sspr(0,64,16,16,25,15,32,32)
+   spr(42,38,52)
+  end
+  if isplaying(2) then
+   rectfill(70,10,102,55,p2.colour)
+   recolour(p2.sprite.recolour)
+   sspr(32,32,16,16,70,15,32,32)
+   pal()
+   spr(43,83,52)
+  else
+   rectfill(70,10,102,55,0)
+   sspr(0,64,16,16,70,15,32,32)
+   spr(42,83,52)
+  end
+  if isplaying(3) then
+   rectfill(25,65,57,110,p3.colour)
+   sspr(32,32,16,16,25,70,32,32)
+   spr(43,38,107)
+  else
+   rectfill(25,65,57,110,0)
+   sspr(0,64,16,16,25,70,32,32)
+   spr(42,38,107)
+  end
+  if isplaying(4) then
+   rectfill(70,65,102,110,p4.colour)
+   sspr(32,32,16,16,70,70,32,32)
+   spr(43,83,107)
+  else
+   rectfill(70,65,102,110,0)
+   sspr(0,64,16,16,70,70,32,32)
+   spr(42,83,107)
+  end
+
+  if (isplaying(1) and numberofplayers() > 1) spr(70,115,115)
+  if (not isplaying(1)) spr(111,5,115)
+
  end
 
  levelstate = state:create({})
@@ -1420,11 +1501,12 @@ ps = powerupsystem:create()
   cls(2)
   print(leveldata[level].name,min(-100+stateman.frame*10,10),10,6)
   if level > 1 then
-   spr(86,32,max(110, 150 - stateman.frame * 3))
+   spr(86,12,60)
   end
-  spr(70,60,max(110, 150 - stateman.frame * 3))
+  spr(111,5,max(115, 150 - stateman.frame * 3))
+  spr(70,115,max(115, 150 - stateman.frame * 3))
   if level < #leveldata then
-   spr(87,128-40,max(110, 150 - stateman.frame * 3))
+   spr(87,110,60)
   end
   rectfill(min(27,-130+27+stateman.frame*10),27,min(128-28,-130+128-28+stateman.frame*10),128-27,leveldata[level].colour)
   map(leveldata[level].map_topx+(flr(leveldata[level].map_width/2))-4, leveldata[level].map_topy+(flr(leveldata[level].map_height/2))-4,max(32,150-stateman.frame * 10),32,8,8)
@@ -1433,83 +1515,67 @@ ps = powerupsystem:create()
  instate = state:create({})
  function instate:draw()
   cls(2)
-  spr(68,min(20, -50 + stateman.frame * 3),8,2,2)
-  pal(1,5)
-  pal(8,14)
-  pal(12,3)
-  pal(15,4)
-  spr(68,max(92, 16*8+35 - stateman.frame * 3),8,2,2,1)
-  pal()
-  print('  ⬆️     ',min(16, -100 + stateman.frame * 3),34,6)
-  print('⬅️⬇️➡️ c ',min(16, -100 + stateman.frame * 3),40,6)
-  print('     e  ',max(78, 16*8+70 - stateman.frame * 3),34,6)
-  print('w  s d f',max(78, 16*8+70 - stateman.frame * 3),40,6)
-  spr(48,max(30,200-stateman.frame*4),55)
-  print('speed',max(40,210-stateman.frame*4),56)
-  spr(50,max(30,205-stateman.frame*4),55+(8*1))
-  print('rapid fire',max(40,215-stateman.frame*4),56+(8*1))
-  spr(54,max(30,210-stateman.frame*4),55+(8*2))
-  print('long range',max(40,220-stateman.frame*4),56+(8*2))
-  spr(56,max(30,215-stateman.frame*4),55+(8*3))
-  print('maximum damage',max(40,225-stateman.frame*4),56+(8*3))
-  spr(58,max(30,220-stateman.frame*4),55+(8*4))
-  print('landmines',max(40,230-stateman.frame*4),56+(8*4))
-  spr(60,max(30,225-stateman.frame*4),55+(8*5))
-  print('full health',max(40,235-stateman.frame*4),56+(8*5))
-  spr(111,60,max(110, 150 - stateman.frame * 4))
+  --spr(68,min(20, -50 + stateman.frame * 3),8,2,2)
+  --recolour(p2.sprite.recolour)
+  --spr(68,max(92, 16*8+35 - stateman.frame * 3),8,2,2,1)
+  --pal()
+  --spr(48,max(30,200-stateman.frame*4),55)
+  --print('speed',max(40,210-stateman.frame*4),56,6)
+  --spr(50,max(30,205-stateman.frame*4),55+(8*1))
+  --print('rapid fire',max(40,215-stateman.frame*4),56+(8*1),6)
+  --spr(54,max(30,210-stateman.frame*4),55+(8*2))
+  --print('long range',max(40,220-stateman.frame*4),56+(8*2),6)
+  --spr(56,max(30,215-stateman.frame*4),55+(8*3))
+  --print('maximum damage',max(40,225-stateman.frame*4),56+(8*3),6)
+  --spr(58,max(30,220-stateman.frame*4),55+(8*4))
+  --print('landmines',max(40,230-stateman.frame*4),56+(8*4),6)
+  --spr(60,max(30,225-stateman.frame*4),55+(8*5))
+  --print('full health',max(40,235-stateman.frame*4),56+(8*5),6)
+  spr(70,115,max(115, 150 - stateman.frame * 4))
  end
 
 
-  instateout = state:create({time=30})
-  function instateout:draw()
-   cls(2)
+ instateout = state:create({time=30})
+ function instateout:draw()
+  cls(2)
 
-   spr(68,20,max(8,8+stateman.frame*10),2,2)
-   pal(1,5)
-   pal(8,14)
-   pal(12,3)
-   pal(15,4)
-   spr(68,92,max(8,8+stateman.frame*10),2,2,1)
-   pal()
-   print('  ⬆️     ',16,max(34,34+stateman.frame*10),6)
-   print('⬅️⬇️➡️ c ',16,max(40,40+stateman.frame*10),6)
-   print('     e  ',78,max(34,34+stateman.frame*10),6)
-   print('w  s d f',78,max(40,40+stateman.frame*10),6)
-   spr(48,30,max(55,55+stateman.frame*10))
-   print('speed',40,max(56,56+stateman.frame*10))
-   spr(50,30,max(55+(8*1),(55+(8*1))+stateman.frame*10))
-   print('rapid fire',40,max(56+(8*1),(56+(8*1))+stateman.frame*10))
-   spr(54,30,max(55+(8*2),(55+(8*2))+stateman.frame*10))
-   print('long range',40,max(56+(8*2),(56+(8*2))+stateman.frame*10))
-   spr(56,30,max(55+(8*3),(55+(8*3))+stateman.frame*10))
-   print('maximum damage',40,max(56+(8*3),(56+(8*3))+stateman.frame*10))
-   spr(58,30,max(55+(8*4),(55+(8*4))+stateman.frame*10))
-   print('landmines',40,max(56+(8*4),(56+(8*4))+stateman.frame*10))
-   spr(60,30,max(55+(8*5),(55+(8*5))+stateman.frame*10))
-   print('full health',40,max(56+(8*5),(56+(8*5))+stateman.frame*10))
+  spr(68,20,max(8,8+stateman.frame*10),2,2)
+  recolour(p2.sprite.recolour)
+  spr(68,92,max(8,8+stateman.frame*10),2,2,1)
+  pal()
+  spr(48,30,max(55,55+stateman.frame*10))
+  print('speed',40,max(56,56+stateman.frame*10),6)
+  spr(50,30,max(55+(8*1),(55+(8*1))+stateman.frame*10))
+  print('rapid fire',40,max(56+(8*1),(56+(8*1))+stateman.frame*10),6)
+  spr(54,30,max(55+(8*2),(55+(8*2))+stateman.frame*10))
+  print('long range',40,max(56+(8*2),(56+(8*2))+stateman.frame*10),6)
+  spr(56,30,max(55+(8*3),(55+(8*3))+stateman.frame*10))
+  print('maximum damage',40,max(56+(8*3),(56+(8*3))+stateman.frame*10),6)
+  spr(58,30,max(55+(8*4),(55+(8*4))+stateman.frame*10))
+  print('landmines',40,max(56+(8*4),(56+(8*4))+stateman.frame*10),6)
+  spr(60,30,max(55+(8*5),(55+(8*5))+stateman.frame*10))
+  print('full health',40,max(56+(8*5),(56+(8*5))+stateman.frame*10),6)
 
-   --spr(111,60,max(110, 150 - stateman.frame * 3))
-
-   local offset = stateman.frame % 2
-   if offset == 1 then
-     if animstate == 0 then animstate = 1 else animstate = 0 end
-   end
-   if animstate == 1 then
-    spr(111,60,110)
-   else
-    spr(127,60,110)
-   end
+  local offset = stateman.frame % 2
+  if offset == 1 then
+   if animstate == 0 then animstate = 1 else animstate = 0 end
   end
+  if animstate == 1 then
+   spr(70,115,115)
+  else
+   spr(71,115,115)
+  end
+ end
 
  levelstateout = state:create({time=30})
  function levelstateout:draw()
   cls(2)
   print(leveldata[level].name,10,max(10,10 + stateman.frame * 10),6)
   if level > 1 then
-   spr(86,32,max(110,110 + stateman.frame*10))
+   spr(86,12,max(60,60 + stateman.frame*10))
   end
   if level < #leveldata then
-   spr(87,128-40,max(110,110+stateman.frame*10))
+   spr(87,110,max(60,60+stateman.frame*10))
   end
    rectfill(27,max(27,27+stateman.frame*10),128-28,max(128-27,128-27 + stateman.frame*10),leveldata[level].colour)
    map(leveldata[level].map_topx+(flr(leveldata[level].map_width/2))-4, leveldata[level].map_topy+(flr(leveldata[level].map_height/2))-4,32,max(32,32+stateman.frame*10),8,8)
@@ -1518,9 +1584,9 @@ ps = powerupsystem:create()
     if animstate == 0 then animstate = 1 else animstate = 0 end
   end
   if animstate == 1 then
-   spr(70,60,110)
+   spr(70,115,115)
   else
-   spr(71,60,110)
+   spr(71,115,115)
   end
  end
 
@@ -1532,16 +1598,15 @@ ps = powerupsystem:create()
    rectfill(0,0,64,128,2)
    rectfill(65,0,128,128,2)
    print("ready?",54,min(60,-10+stateman.frame*5),6)
-  else
-
-  local i
-  for i=0,128,4 do
-   rectfill(0-n,i,128-n,i+1,2)
+  --else
+   --local i
+   --for i=0,128,4 do
+    --rectfill(0-n,i,128-n,i+1,2)
+   --end
+   --for i=2,128,4 do
+    --rectfill(0+n,i,128+n,i+1,2)
+   --end
   end
-  for i=2,128,4 do
-   rectfill(0+n,i,128+n,i+1,2)
-  end
- end
  end
 
  gamestate = state:create({})
@@ -1556,24 +1621,18 @@ ps = powerupsystem:create()
 
   local offset = stateman.frame % 5
   if offset == 1 and stateman.frame > 30 then
-    if animstate == 0 then
-     animstate = 1
-     sfx(2)
-    else
-     animstate = 0
-    end
+   if animstate == 0 then
+    animstate = 1
+    sfx(2)
+   else
+    animstate = 0
+   end
   end
 
   cls()
   for e in all(world) do
-
    if e.player then
-
-   -- use sprite palette info to recolour sprite
-   -- (arrys start at 1)
-   for c=0,15 do
-    pal(c,e.sprite.recolour[c+1])
-   end
+    recolour(e.sprite.recolour)
 
     -- clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
     local pos_x = e.camera.x + (e.camera.w*8)/2 -- + e.position.w/2
@@ -1588,25 +1647,36 @@ ps = powerupsystem:create()
     -- clip()
    end
   end
-
  end
 
  startstate.next = startstateout
- startstateout.next = levelstate
+ startstate.prev = instatein
+
+ startstateout.next = playerstate
+
+ playerstate.next = levelstate
+ playerstate.prev = startstate
+
  instatein.next = instate
  instate.next = instateout
  instateout.next = startstate
+
  levelstate.next = levelstateout
+ levelstate.prev = playerstate
+
  levelstateout.next = readystate
  readystate.next = gamestate
  gamestate.next = winnerstate
  winnerstate.next = startstate
 
  function startstate:update()
-  if stateman.frame > 40 and btnp(4,0) then
-    return self.next
-  elseif stateman.frame > 40 and btnp(5,0) then
-    return instatein
+
+  if (stateman.frame == 0) world = {}
+
+  if stateman.frame > 30 and btnp(4,0) then
+   return self.next
+  elseif stateman.frame > 30 and btnp(5,0) then
+   return self.prev
   else
    return self
   end
@@ -1623,8 +1693,8 @@ ps = powerupsystem:create()
  end
 
  function instate:update()
-  if stateman.frame > 40 and btnp(5,0) then
-    return self.next
+  if stateman.frame > 40 and btnp(4,0) then
+   return self.next
   else
    return self
   end
@@ -1640,25 +1710,77 @@ ps = powerupsystem:create()
   return self
  end
 
+ --ready = false
+ b1tc = false
+ b1lc = false
+ b1tx = false
+ b1lx = false
+ function playerstate:update()
+
+   if (stateman.frame == 0) then
+    --ready = false
+    b1tc = false
+    b1lc = false
+    b1tx = false
+    b1lx = false
+   end
+
+   if stateman.frame > 10 then
+
+   b1tc = btn(4,0)
+   b1tx = btn(5,0)
+
+   if not (b1tc == b1lc) then
+    if b1tc == true then
+     if ( isplaying(1) and numberofplayers() > 1 ) return self.next
+     if (not isplaying(1)) add(world,p1)
+    end
+   end
+
+   if not (b1tx == b1lx) then
+    if b1tx == true then
+     --ready = false
+     if ( not isplaying(1) ) return self.prev
+     if (isplaying(1)) del(world,p1)
+    end
+   end
+
+   b1lc = b1tc
+   b1lx = b1tx
+
+   if (btn(4,1) and isplaying(2) == false) add(world,p2)
+   if (btn(5,1) and isplaying(2)) del(world,p2)
+
+   if (btn(4,2) and isplaying(3) == false) add(world,p3)
+   if (btn(5,2) and isplaying(3)) del(world,p3)
+
+   if (btn(4,3) and isplaying(4) == false) add(world,p4)
+   if (btn(5,3) and isplaying(4)) del(world,p4)
+
+  end
+  return self
+ end
+
  function levelstate:update()
- if stateman.frame > 10 and btnp(4,0) then
-  return self.next
- end
- -- left
- if btnp(0,0) and level > 1then
-  level -= 1
-  --if level < 1 or leveldata[level] == nil then level = #leveldata end
-  stateman.frame = 0
-  sfx(6)
- end
- -- right
- if btnp(1,0) and level < #leveldata then
-  level += 1
-  --if level > #leveldata then level = 1 end
-  stateman.frame = 0
-  sfx(6)
- end
- return self
+  if stateman.frame > 10 and btnp(4,0) then
+   return self.next
+  end
+  if stateman.frame > 10 and btnp(5,0) then
+   return self.prev
+  end
+  -- left
+  if btnp(0,0) and level > 1 then
+   level -= 1
+   stateman.frame = 0
+   sfx(6)
+  end
+  -- right
+  if btnp(1,0) and level < #leveldata then
+   level += 1
+   stateman.frame = 0
+   sfx(6)
+  end
+  return self
  end
 
  function instateout:update()
@@ -1680,21 +1802,22 @@ ps = powerupsystem:create()
   end
   return self
  end
+
  function gamestate:update()
-   phys:update(world)
-   cs:update(world)
-   as:update(world)
-   ws:update(world)
-   bs:update(world)
-   cts:update(world)
-   ps:update(world)
+  phys:update(world)
+  cs:update(world)
+  as:update(world)
+  ws:update(world)
+  bs:update(world)
+  cts:update(world)
+  ps:update(world)
 
   -- delete entities
   for e in all(world) do
    if e.del then del(world,e) end
   end
 
-  if playersalive < 2 then
+  if numberofplayers() < 2 then
    return self.next
   else
    return self
@@ -1703,7 +1826,6 @@ ps = powerupsystem:create()
  end
 
  function readystate:update()
-
   if stateman.frame == 1 then
    reset_game()
   end
@@ -1720,21 +1842,22 @@ ps = powerupsystem:create()
 
  function winnerstate:update()
   -- stop rain sound
-  music(-1,2000)
+  music(-1)
 
   -- screen shows for
   -- a specific time
   self.timeremaining -= 1
 
-  if self.timeremaining < 1 then
-   self.timeremaining = self.time
-   return self.next
-  end
+   if self.timeremaining < 1 then
+    self.timeremaining = self.time
+    return self.next
+   end
   return self
  end
 
  stateman.current = startstate
 
+-- end _init()
 end
 
 function _update()
@@ -1762,14 +1885,14 @@ __gfx__
 0f11100001f10000018110000011f000011f100001f1100001111000011f100001f110000f1100000181100000111f0001f11000011f10000111100001f11000
 01111000011c00000111100000c1100001111000011c00000111100000c1100001111000011c0000011110000001100001111000011000000111100000111000
 00c0c000010000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000000c000000c100000c0c000000c00000c00000000c00000
-08888000000880000000000000000000000000000000000000000000000000000000000000000000000000000000000066000000000000001111111122222222
-0ff88000088880000000000000000000000000000000000000000000000000000000000000000000000000000000000066000000000000001155555122555522
-0ff180000f8880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001511111125222252
-011180000ff180000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001155551125222252
-01f18000011180000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111115125555522
-011f1000f11100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111115125222222
-01111000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001555551125222222
-0c0c000001c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111111122222222
+08888000000880000000000000000000000000000000000000000000000000006666666533333335666666656666666566000000000000001111111122222222
+0ff88000088880000000000000000000000000000000000000000000000000006666666533333335666566656666666566000000000000001155555122555522
+0ff180000f8880000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001511111125222252
+011180000ff180000000000000000000000000000000000000000000000000006666666533333335655555656555556500000000000000001155551125222252
+01f18000011180000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001111115125555522
+011f1000f11100000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001111115125222222
+01111000011000000000000000000000000000000000000000000000000000006666666533333335666666656666666500000000000000001555551125222222
+0c0c000001c000000000000000000000000000000000000000000000000000005555555555555555555555555555555500000000000000001111111122222222
 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555500000055550000
 57447445564464455774444556644445544444455444444557774445566644455744447556444465544444455444444554444445544444455500000056650000
 54744745546446455744444556444445544744455446444557744445566444455474474554644645545555455455554557744775566446650000000056650000
@@ -1810,6 +1933,22 @@ ffff6fff6667666777777777ffff777766566566ccc44ccccccccccc333666333b3bbb3b3333333b
 6666666633455433334554333345543333455433334554333345543366666666bbbbbb3b3bbbbbbbbbbbb333333bbbbbbbbbbb330c000c0c0c0c000056555655
 67777777333443333334433333344333333443333334433333344333666666633b3bbbb33b333bbbb3bbbb3333333bbbbbb3bb33000000c000c0000055555555
 666666663334433333333333333443333334433333333333333333333666663333b333b333333333333333333333333333333b33000000000000000055555555
+00000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000077777700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007777667700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007777667700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007766666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007766666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007766555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007766555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007755555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00007755555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00005566555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00005566555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00005555660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00005555660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000066000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000066000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 88333333333333333333333333333333333333333333333333333333333333338844444444444444444444444444444444444444444444444444444444444444
 88333333333333333333333333333333333333333333333333333333333333338844444444444444444444444444444444444444444444444444444444444444
