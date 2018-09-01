@@ -164,25 +164,35 @@ raindata.rainlist = {60,10,0}
 --playersalive = 2
 animstate = 0
 
---{name = "abandoned house", colour = 1, map_colour = 6, map_topx = 0, map_topy = 0, map_width = 32, map_height = 32, spawn = {}, poweruppos = {}, rain=false},
-
 level = 1
 leveldata = {}
 
 l1            = {}
-l1.name       = "gardens"
-l1.colour     = 7
-l1.map_colour = 3
-l1.map_topx   = 32
-l1.map_topy   = 0
-l1.map_width  = 32
-l1.map_height = 32
-l1.spawn      = {}
-l1.poweruppos = {}
-l1.rain       = true
+l1.name          = "abandoned house"
+l1.colour        = 1
+l1.map_colour    = 6
+l1.map_topx      = 0
+l1.map_topy      = 0
+l1.map_width     = 32
+l1.map_height    = 32
+l1.spawn         = {}
+l1.poweruppos    = {}
+l1.rain          = false
+
+l2            = {}
+l2.name       = "gardens"
+l2.colour     = 7
+l2.map_colour = 3
+l2.map_topx   = 32
+l2.map_topy   = 0
+l2.map_width  = 32
+l2.map_height = 32
+l2.spawn      = {}
+l2.poweruppos = {}
+l2.rain       = true
 
 add(leveldata,l1)
-add(leveldata,l1)
+add(leveldata,l2)
 
 -----------
 -- entities
@@ -1399,53 +1409,25 @@ function _init()
  startstate = state:create({})
  function startstate:draw()
   cls(2)
-  spr(64,48,min(38, -20 + stateman.frame * 3),4,2)
-  spr(68,min(20, -50 + stateman.frame * 3),38,2,2)
+  spr(64,48,38,4,2)
+  spr(68,20,38,2,2)
   recolour(p2.sprite.recolour)
-  spr(68,max(92, 16*8+35 - stateman.frame * 3),38,2,2,1)
+  spr(68,92,38,2,2,1)
   pal()
-  spr(70,115,max(115, 200 - stateman.frame * 3))
-  spr(111,5,max(115, 200 - stateman.frame * 3))
-  print('by rik',52,116,14)
+  spr(87,115,115)
+  print('by rik',5,116,14)
  end
 
- startstateout = state:create({time=30})
- function startstateout:draw()
-  cls(2)
-  spr(64,48,max(38, 38 + stateman.frame * 10),4,2)
-  spr(68,20,max(38, 38 + stateman.frame * 10),2,2)
-  recolour(p2.sprite.recolour)
-  spr(68,92,max(38, 38 + stateman.frame * 10),2,2,1)
-  pal()
-  spr(111,30,max(90, 90 + stateman.frame * 10))
-  local offset = stateman.frame % 2
-  if offset == 1 then
-    if animstate == 0 then animstate = 1 else animstate = 0 end
-  end
-  if animstate == 1 then
-   spr(70,115,115)
+ fadestate = state:create({time=30})
+ function fadestate:draw()
+   if stateman.frame < (flr(self.time/2)) then
+    self.prev:draw()
+    rectfill(0,-1,128,min(stateman.frame * 10,64),0)
+    rectfill(-1,max(128-(stateman.frame * 10),64),128,128,0)
   else
-   spr(71,115,115)
-  end
- end
-
- instatein = state:create({time=30})
- function instatein:draw()
-  cls(2)
-  spr(64,48,max(38, 38 + stateman.frame * 10),4,2)
-  spr(68,20,max(38, 38 + stateman.frame * 10),2,2)
-  recolour(p2.sprite.recolour)
-  spr(68,92,max(38, 38 + stateman.frame * 10),2,2,1)
-  pal()
-  spr(70,90,max(90, 90 + stateman.frame * 10))
-  local offset = stateman.frame % 2
-  if offset == 1 then
-    if animstate == 0 then animstate = 1 else animstate = 0 end
-  end
-  if animstate == 1 then
-   spr(111,5,115)
-  else
-   spr(127,5,115)
+   self.next:draw()
+   rectfill(0,-1,128,64-((stateman.frame - (self.time/2)) * 10),0)
+   rectfill(0,128,128,64+((stateman.frame - (self.time/2)) * 10),0)
   end
  end
 
@@ -1491,103 +1473,27 @@ function _init()
    spr(42,83,107)
   end
 
-  if (isplaying(1) and numberofplayers() > 1) spr(70,115,115)
-  if (not isplaying(1)) spr(111,5,115)
+  if (isplaying(1) and numberofplayers() > 1) spr(87,115,115)
+  if (not isplaying(1)) spr(86,5,115)
 
  end
 
  levelstate = state:create({})
  function levelstate:draw()
   cls(2)
-  print(leveldata[level].name,min(-100+stateman.frame*10,10),10,6)
+  print(leveldata[level].name,10,10,6)
   if level > 1 then
-   spr(86,12,60)
+   rectfill(0,27,17,128-27,leveldata[level-1].colour)
+   map(leveldata[level-1].map_topx+(flr(leveldata[level-1].map_width/2))-4, leveldata[level-1].map_topy+(flr(leveldata[level-1].map_height/2))-4,-51,32,8,8)
   end
-  spr(111,5,max(115, 150 - stateman.frame * 3))
-  spr(70,115,max(115, 150 - stateman.frame * 3))
+  spr(86,5,115)
+  spr(87,115,115)
   if level < #leveldata then
-   spr(87,110,60)
+   rectfill(110,27,128,128-27,leveldata[level+1].colour)
+   map(leveldata[level+1].map_topx+(flr(leveldata[level+1].map_width/2))-4, leveldata[level+1].map_topy+(flr(leveldata[level+1].map_height/2))-4,115,32,8,8)
   end
-  rectfill(min(27,-130+27+stateman.frame*10),27,min(128-28,-130+128-28+stateman.frame*10),128-27,leveldata[level].colour)
-  map(leveldata[level].map_topx+(flr(leveldata[level].map_width/2))-4, leveldata[level].map_topy+(flr(leveldata[level].map_height/2))-4,max(32,150-stateman.frame * 10),32,8,8)
- end
-
- instate = state:create({})
- function instate:draw()
-  cls(2)
-  --spr(68,min(20, -50 + stateman.frame * 3),8,2,2)
-  --recolour(p2.sprite.recolour)
-  --spr(68,max(92, 16*8+35 - stateman.frame * 3),8,2,2,1)
-  --pal()
-  --spr(48,max(30,200-stateman.frame*4),55)
-  --print('speed',max(40,210-stateman.frame*4),56,6)
-  --spr(50,max(30,205-stateman.frame*4),55+(8*1))
-  --print('rapid fire',max(40,215-stateman.frame*4),56+(8*1),6)
-  --spr(54,max(30,210-stateman.frame*4),55+(8*2))
-  --print('long range',max(40,220-stateman.frame*4),56+(8*2),6)
-  --spr(56,max(30,215-stateman.frame*4),55+(8*3))
-  --print('maximum damage',max(40,225-stateman.frame*4),56+(8*3),6)
-  --spr(58,max(30,220-stateman.frame*4),55+(8*4))
-  --print('landmines',max(40,230-stateman.frame*4),56+(8*4),6)
-  --spr(60,max(30,225-stateman.frame*4),55+(8*5))
-  --print('full health',max(40,235-stateman.frame*4),56+(8*5),6)
-  spr(70,115,max(115, 150 - stateman.frame * 4))
- end
-
-
- instateout = state:create({time=30})
- function instateout:draw()
-  cls(2)
-
-  spr(68,20,max(8,8+stateman.frame*10),2,2)
-  recolour(p2.sprite.recolour)
-  spr(68,92,max(8,8+stateman.frame*10),2,2,1)
-  pal()
-  spr(48,30,max(55,55+stateman.frame*10))
-  print('speed',40,max(56,56+stateman.frame*10),6)
-  spr(50,30,max(55+(8*1),(55+(8*1))+stateman.frame*10))
-  print('rapid fire',40,max(56+(8*1),(56+(8*1))+stateman.frame*10),6)
-  spr(54,30,max(55+(8*2),(55+(8*2))+stateman.frame*10))
-  print('long range',40,max(56+(8*2),(56+(8*2))+stateman.frame*10),6)
-  spr(56,30,max(55+(8*3),(55+(8*3))+stateman.frame*10))
-  print('maximum damage',40,max(56+(8*3),(56+(8*3))+stateman.frame*10),6)
-  spr(58,30,max(55+(8*4),(55+(8*4))+stateman.frame*10))
-  print('landmines',40,max(56+(8*4),(56+(8*4))+stateman.frame*10),6)
-  spr(60,30,max(55+(8*5),(55+(8*5))+stateman.frame*10))
-  print('full health',40,max(56+(8*5),(56+(8*5))+stateman.frame*10),6)
-
-  local offset = stateman.frame % 2
-  if offset == 1 then
-   if animstate == 0 then animstate = 1 else animstate = 0 end
-  end
-  if animstate == 1 then
-   spr(70,115,115)
-  else
-   spr(71,115,115)
-  end
- end
-
- levelstateout = state:create({time=30})
- function levelstateout:draw()
-  cls(2)
-  print(leveldata[level].name,10,max(10,10 + stateman.frame * 10),6)
-  if level > 1 then
-   spr(86,12,max(60,60 + stateman.frame*10))
-  end
-  if level < #leveldata then
-   spr(87,110,max(60,60+stateman.frame*10))
-  end
-   rectfill(27,max(27,27+stateman.frame*10),128-28,max(128-27,128-27 + stateman.frame*10),leveldata[level].colour)
-   map(leveldata[level].map_topx+(flr(leveldata[level].map_width/2))-4, leveldata[level].map_topy+(flr(leveldata[level].map_height/2))-4,32,max(32,32+stateman.frame*10),8,8)
-  local offset = stateman.frame % 2
-  if offset == 1 then
-    if animstate == 0 then animstate = 1 else animstate = 0 end
-  end
-  if animstate == 1 then
-   spr(70,115,115)
-  else
-   spr(71,115,115)
-  end
+  rectfill(27,27,128-28,128-27,leveldata[level].colour)
+  map(leveldata[level].map_topx+(flr(leveldata[level].map_width/2))-4, leveldata[level].map_topy+(flr(leveldata[level].map_height/2))-4,32,32,8,8)
  end
 
  readystate = state:create({time=70})
@@ -1597,15 +1503,15 @@ function _init()
   if stateman.frame < 40 then
    rectfill(0,0,64,128,2)
    rectfill(65,0,128,128,2)
-   print("ready?",54,min(60,-10+stateman.frame*5),6)
-  --else
-   --local i
-   --for i=0,128,4 do
-    --rectfill(0-n,i,128-n,i+1,2)
-   --end
-   --for i=2,128,4 do
-    --rectfill(0+n,i,128+n,i+1,2)
-   --end
+   print("ready?",54,60,6)
+  else
+   local i
+   for i=0,128,4 do
+    rectfill(0-n,i,128-n,i+1,2)
+   end
+   for i=2,128,4 do
+    rectfill(0+n,i,128+n,i+1,2)
+   end
   end
  end
 
@@ -1649,68 +1555,38 @@ function _init()
   end
  end
 
- startstate.next = startstateout
- startstate.prev = instatein
-
- startstateout.next = playerstate
-
+ startstate.next = playerstate
  playerstate.next = levelstate
  playerstate.prev = startstate
-
- instatein.next = instate
- instate.next = instateout
- instateout.next = startstate
-
- levelstate.next = levelstateout
+ levelstate.next = readystate
  levelstate.prev = playerstate
-
- levelstateout.next = readystate
  readystate.next = gamestate
  gamestate.next = winnerstate
  winnerstate.next = startstate
+
+ function fadestate:update()
+  self.timeremaining -= 1
+  if self.timeremaining < 1 then
+   self.timeremaining = self.time
+   return self.next
+  end
+  return self
+ end
 
  function startstate:update()
 
   if (stateman.frame == 0) world = {}
 
-  if stateman.frame > 30 and btnp(4,0) then
-   return self.next
-  elseif stateman.frame > 30 and btnp(5,0) then
-   return self.prev
+  if btnp(4,0) then
+   fadestate.prev = self
+   fadestate.next = self.next
+   return fadestate
+   --return self.next
   else
    return self
   end
  end
 
- function instatein:update()
-  if stateman.frame == 1 then sfx(5) end
-  self.timeremaining -= 1
-  if self.timeremaining < 1 then
-   self.timeremaining = self.time
-   return self.next
-  end
-  return self
- end
-
- function instate:update()
-  if stateman.frame > 40 and btnp(4,0) then
-   return self.next
-  else
-   return self
-  end
- end
-
- function startstateout:update()
-  if stateman.frame == 1 then sfx(5) end
-  self.timeremaining -= 1
-  if self.timeremaining < 1 then
-   self.timeremaining = self.time
-   return self.next
-  end
-  return self
- end
-
- --ready = false
  b1tc = false
  b1lc = false
  b1tx = false
@@ -1718,29 +1594,39 @@ function _init()
  function playerstate:update()
 
    if (stateman.frame == 0) then
-    --ready = false
     b1tc = false
     b1lc = false
     b1tx = false
     b1lx = false
    end
 
-   if stateman.frame > 10 then
+   --if stateman.frame > 5 then
 
    b1tc = btn(4,0)
    b1tx = btn(5,0)
 
    if not (b1tc == b1lc) then
     if b1tc == true then
-     if ( isplaying(1) and numberofplayers() > 1 ) return self.next
-     if (not isplaying(1)) add(world,p1)
+     if ( isplaying(1) and numberofplayers() > 1 ) then
+      fadestate.prev = self
+      fadestate.next = self.next
+      return fadestate
+     end
+     if (not isplaying(1)) then
+      add(world,p1)
+      sfx(6)
+     end
     end
    end
 
    if not (b1tx == b1lx) then
     if b1tx == true then
      --ready = false
-     if ( not isplaying(1) ) return self.prev
+     if ( not isplaying(1) ) then
+      fadestate.prev = self
+      fadestate.next = self.prev
+      return fadestate
+     end
      if (isplaying(1)) del(world,p1)
     end
    end
@@ -1748,25 +1634,38 @@ function _init()
    b1lc = b1tc
    b1lx = b1tx
 
-   if (btn(4,1) and isplaying(2) == false) add(world,p2)
+   if (btn(4,1) and isplaying(2) == false) then
+    add(world,p2)
+    sfx(6)
+   end
    if (btn(5,1) and isplaying(2)) del(world,p2)
 
-   if (btn(4,2) and isplaying(3) == false) add(world,p3)
+   if (btn(4,2) and isplaying(3) == false) then
+    add(world,p3)
+    sfx(6)
+   end
    if (btn(5,2) and isplaying(3)) del(world,p3)
 
-   if (btn(4,3) and isplaying(4) == false) add(world,p4)
+   if (btn(4,3) and isplaying(4) == false) then
+    add(world,p4)
+    sfx(6)
+   end
    if (btn(5,3) and isplaying(4)) del(world,p4)
 
-  end
+  --end
   return self
  end
 
  function levelstate:update()
-  if stateman.frame > 10 and btnp(4,0) then
-   return self.next
+  if btnp(4,0) then
+   fadestate.prev = self
+   fadestate.next = self.next
+   return fadestate
   end
-  if stateman.frame > 10 and btnp(5,0) then
-   return self.prev
+  if btnp(5,0) then
+   fadestate.prev = self
+   fadestate.next = self.prev
+   return fadestate
   end
   -- left
   if btnp(0,0) and level > 1 then
@@ -1779,26 +1678,6 @@ function _init()
    level += 1
    stateman.frame = 0
    sfx(6)
-  end
-  return self
- end
-
- function instateout:update()
- if stateman.frame == 1 then sfx(5) end
-  self.timeremaining -= 1
-  if self.timeremaining < 1 then
-   self.timeremaining = self.time
-   return self.next
-  end
-  return self
- end
-
- function levelstateout:update()
- if stateman.frame == 1 then sfx(5) end
-  self.timeremaining -= 1
-  if self.timeremaining < 1 then
-   self.timeremaining = self.time
-   return self.next
   end
   return self
  end
@@ -1885,14 +1764,14 @@ __gfx__
 0f11100001f10000018110000011f000011f100001f1100001111000011f100001f110000f1100000181100000111f0001f11000011f10000111100001f11000
 01111000011c00000111100000c1100001111000011c00000111100000c1100001111000011c0000011110000001100001111000011000000111100000111000
 00c0c000010000000c00c000000c100000cc000000c000000c00c000000c000000cc000001c000000000c000000c100000c0c000000c00000c00000000c00000
-08888000000880000000000000000000000000000000000000000000000000006666666533333335666666656666666566000000000000001111111122222222
-0ff88000088880000000000000000000000000000000000000000000000000006666666533333335666566656666666566000000000000001155555122555522
-0ff180000f8880000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001511111125222252
-011180000ff180000000000000000000000000000000000000000000000000006666666533333335655555656555556500000000000000001155551125222252
-01f18000011180000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001111115125555522
-011f1000f11100000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000001111115125222222
-01111000011000000000000000000000000000000000000000000000000000006666666533333335666666656666666500000000000000001555551125222222
-0c0c000001c000000000000000000000000000000000000000000000000000005555555555555555555555555555555500000000000000001111111122222222
+08888000000880000000000000000000000000000000000000000000000000006666666533333335666666656666666566000000000000005566556644444444
+0ff88000088880000000000000000000000000000000000000000000000000006666666533333335666566656666666566000000000000005566556645444454
+0ff180000f8880000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000006655665544544544
+011180000ff180000000000000000000000000000000000000000000000000006666666533333335655555656555556500000000000000006655665544455444
+01f18000011180000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000005566556644455444
+011f1000f11100000000000000000000000000000000000000000000000000006666666533333335666566656666666500000000000000005566556644544544
+01111000011000000000000000000000000000000000000000000000000000006666666533333335666666656666666500000000000000006655665545444454
+0c0c000001c000000000000000000000000000000000000000000000000000005555555555555555555555555555555500000000000000006655665544444444
 55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555500000055550000
 57447445564464455774444556644445544444455444444557774445566644455744447556444465544444455444444554444445544444455500000056650000
 54744745546446455744444556444445544744455446444557744445566444455474474554644645545555455455554557744775566446650000000056650000
@@ -2131,3 +2010,4 @@ __music__
 00 45474344
 00 45474344
 00 45474844
+
