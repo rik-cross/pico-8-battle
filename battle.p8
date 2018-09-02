@@ -1,10 +1,9 @@
 pico-8 cartridge // http://www.pico-8.com
 version 16
 __lua__
--- constants / helper functions
+-- globals / constants / helper functions
 
--- do i have a memory leak by not destroying
--- items removed from a list?
+world = {}
 
 -- powerups
 powerups = {
@@ -17,18 +16,33 @@ powerups = {
  health = 7
 }
 
+-- returns the number of the
+-- powerup name provided
 function getpowerup(powerupname)
  return powerups[powerupname]
 end
 
+-- resets a player entity
+-- (might be a better place
+-- to put this code)
 function resetentity(e)
- e.position.x, e.position.y = findfreeloc(leveldata[level].spawn,world)
- e.camera.shake          = false
- e.camera.shakeremaining = 6
- e.battle.lives = 2
- e.battle.health = e.battle.maxhealth
+ if e:has('position') then
+  e.position.x, e.position.y = findfreeloc(leveldata[level].spawn,world)
+  e.position.x = e.position.x + 1
+ end
+ if e:has('camera') then
+  e.camera.shake = false
+  e.camera.shakeremaining = 6
+  e.camera.h = e.camera.orig_h
+  e.camera.y = e.camera.orig_y
+ end
+ if e:has('battle') then
+  e.battle.lives = 2
+  e.battle.health = e.battle.maxhealth
+ end
 end
 
+-- shuffles the given structure (in place)
 function shuffle(structure)
  for i = #structure,2,-1 do
   local j = flr(rnd(i))+1
@@ -43,6 +57,8 @@ function recolour(palette)
  end
 end
 
+-- returns the number of players
+-- currently playing a game
 function numberofplayers()
  local n = 0
  for e in all(world) do
@@ -51,6 +67,8 @@ function numberofplayers()
  return n
 end
 
+-- returns true is the player number
+-- is currently playing a game
 function isplaying(num)
  for e in all(world) do
   if e.playernum == num then
@@ -60,49 +78,52 @@ function isplaying(num)
  return false
 end
 
--->8
--- f
--->8
--- f
--->8
--- f
--->8
--- f
--->8
--- f
--->8
--- f
-
--- playing = {p1=true,p2=true,p3=false,p4=false}
-
-partlist = {}
-
---should define lifecycle  too
-function addpart(_x,_y,_dx,_dy,_s,_flare,_decay)
- local part = {}
- part.x=_x+flr(rnd(_flare*2))-_flare
- part.y=_y+flr(rnd(_flare*2))-_flare
- part.dx=_dx
- part.dy=_dy
- part.s=_s
- part.c=flr(rnd(2))+6
- part.t=_decay
- add(partlist,part)
-end
-
-function updatepart()
- for p in all(partlist) do
-  p.t-=1
-  if p.t < 0 then
-   p.s-=1
-   p.x+=p.dx
-   p.y+=p.dy
-   p.t=3
+-- returns coordinates of an unoccupied
+-- position in the structure
+function findfreeloc(structure,w)
+ for pos in all(shuffle(structure)) do
+  local found = true
+  for e in all(w) do
+   local x1=e.position.x
+   local y1=e.position.y
+   local x2=(e.position.x+(e.position.w))
+   local y2=(e.position.y+(e.position.h))
+   if (pos[1] < x2 and pos[1] + 8 > x1 and pos[2] < y2 and pos[2] + 8 > y1) found = false
   end
-  if (p.s < 1) del(partlist,p)
-  p.t-=1
+  if (found) return pos[1], pos[2]
  end
+ return 8,8
 end
+
+-- reset players between battles
+function reset_game()
+
+ --reset all players and remove all non-players
+ for e in all(world) do
+  if e.player then
+   resetentity(e)
+  else
+   del(world,e)
+  end
+ end
+
+ -- update camera sizes dependent on
+ -- the number of players
+
+ if (isplaying(1) and (not isplaying(3)) and numberofplayers() == 2) p1.camera.h = 16
+ if (isplaying(2) and (not isplaying(4)) and numberofplayers() == 2) p2.camera.h = 16
+ if isplaying(3) and not isplaying(1) and numberofplayers() == 2 then
+  p3.camera.h = 16
+  p3.camera.y = 0
+ end
+ if isplaying(4) and not isplaying(2) and numberofplayers() == 2 then
+  p4.camera.h = 16
+  p4.camera.y = 0
+ end
+
+end
+-->8
+-- state manager
 
 -- stores game state
 state = {}
@@ -121,7 +142,6 @@ end
 
 -- keeps track and updates
 -- a list of states
-
 statemanager = {}
 statemanager.__index = statemanager
 
@@ -153,532 +173,436 @@ function statemanager:draw()
  self.current:draw()
 end
 
-world      = {}
+-->8
+-- entities / components
 
-raindata = {}
-raindata.targetrainlevel = 0
-raindata.currentrainlevel = 0
-raindata.timeuntilnextlevel = 0
-raindata.rainlist = {60,10,0}
-
---playersalive = 2
-animstate = 0
-
-level = 1
-leveldata = {}
-
-l1            = {}
-l1.name          = "abandoned house"
-l1.colour        = 1
-l1.map_colour    = 6
-l1.map_topx      = 0
-l1.map_topy      = 0
-l1.map_width     = 32
-l1.map_height    = 32
-l1.spawn         = {}
-l1.poweruppos    = {}
-l1.rain          = false
-
-l2            = {}
-l2.name       = "gardens"
-l2.colour     = 7
-l2.map_colour = 3
-l2.map_topx   = 32
-l2.map_topy   = 0
-l2.map_width  = 32
-l2.map_height = 32
-l2.spawn      = {}
-l2.poweruppos = {}
-l2.rain       = true
-
-add(leveldata,l1)
-add(leveldata,l2)
-
------------
--- entities
------------
-
+-- an entity is a collection
+-- of components
 entity = {}
 entity.__index = entity
 
 function entity:create(props)
-  local this = {}
-  local props = props or {}
+ local this = {}
+ local props = props or {}
 
-  this.player    = props.player or false
-  this.playernum = props.playernum or 0
-  this.colour    = props.colour or 0
-  this.del       = false
-  this.sprite    = props.sprite
-  this.animation = props.animation
-  this.position  = props.position
-  this.controls  = props.controls
-  this.intention = props.intention
-  this.camera    = props.camera
-  this.battle    = props.battle
-  this.weapon    = props.weapon
-  this.collision = props.collision
-  this.powerup   = props.powerup
+ this.player    = props.player or false
+ this.playernum = props.playernum or 0
+ this.colour    = props.colour or 0
+ this.sprite    = props.sprite
+ this.animation = props.animation
+ this.position  = props.position
+ this.controls  = props.controls
+ this.intention = props.intention
+ this.camera    = props.camera
+ this.battle    = props.battle
+ this.weapon    = props.weapon
+ this.collision = props.collision
+ this.powerup   = props.powerup
+ this.del       = false
 
-  setmetatable(this, entity)
-  return this
+ setmetatable(this, entity)
+ return this
 end
 
+-- returns true is an entity
+-- contains a component
 function entity:has(key)
   return self[key] ~= nil
 end
 
----------
--- sprite
----------
-
+-- sprite component
 sprite = {}
 sprite.__index = sprite
 
 function sprite:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.number          = props.number or 2
-    this.currentnumber   = this.number
-    this.spritesinsheet  = props.spritesinsheet or 8
-    this.recolour        = props.recolour or {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
+ this.number          = props.number or 2
+ this.currentnumber   = this.number
+ this.spritesinsheet  = props.spritesinsheet or 8
+ this.recolour        = props.recolour or {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
 
-    setmetatable(this, sprite)
-    return this
+ setmetatable(this, sprite)
+ return this
 end
 
-------------
--- animation
-------------
-
+-- animation component
 animation = {}
 animation.__index = animation
 
 function animation:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.frames = props.frames or 4
-    this.animspeed = props.animspeed or 2
-    this.timeoncurrent = 0
-    this.animtype = props.movementanim or 'movement_only'
+ this.frames = props.frames or 4
+ this.animspeed = props.animspeed or 2
+ this.timeoncurrent = 0
+ this.animtype = props.movementanim or 'movement_only'
 
-    setmetatable(this, animation)
-    return this
+ setmetatable(this, animation)
+ return this
 end
 
------------
--- position
------------
-
+-- position component
 position = {}
 position.__index = position
 
 function position:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.x         = props.x or 10
-    this.y         = props.y or 10
-    this.w         = props.w or 6
-    this.h         = props.h or 8
-    this.speed     = props.speed or 1
-    this.angle     = props.angle or 180
-    this.moving    = props.moving or false
-    this.velocity  = props.velocity or 0
-    this.ranged    = props.ranged or false
-    this.range     = props.range or 0
+ this.x         = props.x or 10
+ this.y         = props.y or 10
+ this.w         = props.w or 6
+ this.h         = props.h or 8
+ this.speed     = props.speed or 1
+ this.angle     = props.angle or 180
+ this.moving    = props.moving or false
+ this.velocity  = props.velocity or 0
+ this.ranged    = props.ranged or false
+ this.range     = props.range or 0
 
-    setmetatable(this, position)
-    return this
+ setmetatable(this, position)
+ return this
 end
 
------------
--- controls
------------
-
+-- controls component
 controls = {}
 controls.__index = controls
 
 function controls:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.l = props.l or 0
-    this.r = props.r or 1
-    this.u = props.u or 2
-    this.d = props.d or 3
-    this.o = props.o or 4
-    this.x = props.x or 5
-    this.p = props.p or 0
+ this.l = props.l or 0
+ this.r = props.r or 1
+ this.u = props.u or 2
+ this.d = props.d or 3
+ this.o = props.o or 4
+ this.x = props.x or 5
+ this.p = props.p or 0
 
-    setmetatable(this, controls)
-    return this
+ setmetatable(this, controls)
+ return this
 end
 
-------------
--- intention
-------------
-
+-- intention component
 intention = {}
 intention.__index = intention
 
 function intention:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.l = false
-    this.r = false
-    this.u = false
-    this.d = false
-    this.o = false
-    this.x = false
+ this.l = false
+ this.r = false
+ this.u = false
+ this.d = false
+ this.o = false
+ this.x = false
 
-    setmetatable(this, intention)
-    return this
+ setmetatable(this, intention)
+ return this
 end
 
----------
--- camera
----------
-
+-- camera component
 camera = {}
 camera.__index = camera
 
 function camera:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.bg             = props.bg or 0
-    this.x              = props.x  or 0
-    this.y              = props.y  or 0
-    this.w              = props.w  or 8
-    this.h              = props.h  or 16
-    this.shake          = false
-    this.shakeremaining = 6
-    this.rainlist       = {}
+ this.x              = props.x  or 0
+ this.y              = props.y  or 0
+ this.orig_y         = this.y
+ this.w              = props.w  or 8
+ this.h              = props.h  or 8
+ this.orig_h         = this.h
+ this.shake          = false
+ this.shakeremaining = 6
+ this.rainlist       = {}
 
-    setmetatable(this, camera)
-    return this
+ setmetatable(this, camera)
+ return this
 end
 
----------
--- battle
----------
-
+-- battle component
 battle = {}
 battle.__index = battle
 
 function battle:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.health    = props.health or 100
-    this.maxhealth = props.maxhealth or 100
-    this.lives     = props.lives or 2
+ this.health    = props.health or 100
+ this.maxhealth = props.maxhealth or 100
+ this.lives     = props.lives or 2
 
-    setmetatable(this, battle)
-    return this
+ setmetatable(this, battle)
+ return this
 end
 
----------
--- weapon
----------
-
+-- weapon component
 weapon = {}
 weapon.__index = weapon
 
 function weapon:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.damage    = props.damage or 25
-    this.rate      = props.rate or 10
-    this.lastfired = 0
-    this.speed     = props.speed or 6
-    this.range     = props.range or 15
+ this.damage    = props.damage or 25
+ this.rate      = props.rate or 10
+ this.lastfired = 0
+ this.speed     = props.speed or 6
+ this.range     = props.range or 15
 
-    setmetatable(this, weapon)
-    return this
+ setmetatable(this, weapon)
+ return this
 end
 
-----------
--- powerup
-----------
-
+-- powerup component
 powerup = {}
 powerup.__index = powerup
 
 function powerup:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.type          = props.type or 0
-    this.timeremaining = 300
-    this.numberleft    = props.numberleft
+ this.type          = props.type or 0
+ this.timeremaining = 300
+ this.numberleft    = props.numberleft
 
-    setmetatable(this, powerup)
-    return this
+ setmetatable(this, powerup)
+ return this
 end
 
-------------
--- collision
-------------
-
+-- collision component
 collision = {}
 collision.__index = collision
 
 function collision:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    this.isdestroyed = props.isdestroyed or false
-    this.destroys = props.destroys or false
-    this.collisiondamage = props.collisiondamage or 0
-    this.collidedwith = {}
-    this.bouncy = props.bouncy or false
+ this.isdestroyed = props.isdestroyed or false
+ this.destroys = props.destroys or false
+ this.collisiondamage = props.collisiondamage or 0
+ this.collidedwith = {}
+ this.bouncy = props.bouncy or false
 
-    setmetatable(this, collision)
-    return this
+ setmetatable(this, collision)
+ return this
 end
 
-function findfreeloc(structure,w)
- for pos in all(shuffle(structure)) do
-  local found = true
-  for e in all(w) do
-   local x1=e.position.x
-   local y1=e.position.y
-   local x2=(e.position.x+(e.position.w))
-   local y2=(e.position.y+(e.position.h))
+-->8
+-- systems
 
-   if (pos[1] < x2 and pos[1] + 8 > x1 and pos[2] < y2 and pos[2] + 8 > y1) found = false
-
-  end
-  -- +1 as entity width is only 6, not 8
-  if (found) return pos[1]+1, pos[2]
- end
-end
-
------------------
 -- physics system
------------------
-
 physicssystem = {}
 physicssystem.__index = physicssystem
 
 function physicssystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, physicssystem)
-    return this
+ setmetatable(this, physicssystem)
+ return this
 end
 
 function physicssystem:update(w)
  for e in all(world) do
   if e:has('position') then
-  e.position.moving = false
+   e.position.moving = false
 
-  local x_new = e.position.x
-  local y_new = e.position.y
+   local x_new = e.position.x
+   local y_new = e.position.y
 
-  local speed = e.position.speed
-  if (e.player and e:has('powerup') and e.powerup.type == 0) speed = speed + 1
+   local speed = e.position.speed
+   if (e.player and e:has('powerup') and e.powerup.type == 0) speed = speed + 1
 
-  if e.position.ranged and e.position.range - speed < 1 then
-   e.del = true
-   do return end
-  end
+    if e.position.ranged and e.position.range - speed < 1 then
+     e.del = true
+     do return end
+    end
 
-  e.position.range -= speed
+    e.position.range -= speed
 
-  if e:has('intention') then
+    if e:has('intention') then
 
-    -- if entity wants to move up
-    if (e.intention.u) then
+     -- if entity wants to move up
+     if (e.intention.u) then
       y_new = e.position.y - speed
       e.position.moving = true
-    end
+     end
 
-    -- if entity wants to move down
-    if (e.intention.d) then
+     -- if entity wants to move down
+     if (e.intention.d) then
       y_new = e.position.y + speed
       e.position.moving = true
-    end
+     end
 
-    -- if entity wants to move up
-    if (e.intention.l) then
+     -- if entity wants to move up
+     if (e.intention.l) then
       x_new = e.position.x - speed
       e.position.moving = true
-    end
+     end
 
-    -- if entity wants to move up
-    if (e.intention.r) then
+     -- if entity wants to move up
+     if (e.intention.r) then
       x_new = e.position.x + speed
       e.position.moving = true
-    end
-
-    if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
-     e.position.angle = 0
-    elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
-     e.position.angle = 45
-    elseif not e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
-     e.position.angle = 90
-    elseif not e.intention.u and e.intention.d and not e.intention.l and e.intention.r then
-     e.position.angle = 135
-    elseif not e.intention.u and e.intention.d and not e.intention.l and not e.intention.r then
-     e.position.angle = 180
-    elseif not e.intention.u and e.intention.d and e.intention.l and not e.intention.r then
-     e.position.angle = 225
-    elseif not e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
-     e.position.angle = 270
-    elseif e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
-     e.position.angle = 315
-    end
-
-  end
-
-  if (e.position.angle > 0 and e.position.angle < 180) then
-   x_new += e.position.velocity
-  end
-  if (e.position.angle > 180 and e.position.angle < 360) then
-   x_new -= e.position.velocity
-  end
-  if (e.position.angle > 270 or e.position.angle < 90) then
-   y_new -= e.position.velocity
-  end
-  if (e.position.angle < 270 and e.position.angle > 90) then
-   y_new += e.position.velocity
-  end
-
-  if e:has('intention') then
-    -- reset player intention
-    e.intention.u = false
-    e.intention.d = false
-    e.intention.l = false
-    e.intention.r = false
-  end
-
-  -- map hittest
-
-  local xhit, x1, y1, x2, y2, a, xb, xc, xd
-  --local x1
-  --local y1
-  --local x2
-  --local y2
-  --local xa
-  --local xb
-  --local xc
-  --local xd
-  repeat
-    xhit = false
-
-    x1=x_new/8
-    y1=e.position.y/8
-    x2=(x_new+(e.position.w-1))/8
-    y2=(e.position.y+(e.position.h-1))/8
-    xa=fget(mget(x1,y1),0) and not (e.player == false and fget(mget(x1,y1),1))
-    xb=fget(mget(x1,y2),0) and not (e.player == false and fget(mget(x1,y2),1))
-    xc=fget(mget(x2,y2),0) and not (e.player == false and fget(mget(x2,y2),1))
-    xd=fget(mget(x2,y1),0) and not (e.player == false and fget(mget(x2,y1),1))
-
-    if xa or xb or xc or xd then
-     xhit = true
-     if e.position.angle > 0 and e.position.angle < 180 then
-      x_new -= 1
-     else
-      x_new += 1
      end
-    end
-  until(xhit==false or (x_new == e.position.x))
 
- local yhit
- local ya
- local yb
- local yc
- local yd
- repeat
-  yhit = false
-
-  x1=e.position.x/8
-  y1=y_new/8
-  x2=(e.position.x+(e.position.w-1))/8
-  y2=(y_new+(e.position.h-1))/8
-  ya=fget(mget(x1,y1),0) and not (e.player == false and fget(mget(x1,y1),1))
-  yb=fget(mget(x1,y2),0) and not (e.player == false and fget(mget(x1,y2),1))
-  yc=fget(mget(x2,y2),0) and not (e.player == false and fget(mget(x2,y2),1))
-  yd=fget(mget(x2,y1),0) and not (e.player == false and fget(mget(x2,y1),1))
-
-  if ya or yb or yc or yd then
-   yhit = true
-   if e.position.angle > 90 and e.position.angle < 270 then
-    y_new -= 1
-   else
-    y_new += 1
-   end
-  end
- until(yhit==false or (y_new == e.position.y))
-
-  if (yhit or xhit) and e:has('collision') then
-   if e.collision.isdestroyed then
-    e.del = true
-   end
-  end
-
-  -- other entity hittest
-  for o in all(w) do
-   if o ~= e and o:has('position') then
-    local o_x1=o.position.x
-    local o_y1=o.position.y
-    local o_x2=(o.position.x+(o.position.w))
-    local o_y2=(o.position.y+(o.position.h))
-
-    if x_new < o_x2 and x_new + (e.position.w) > o_x1 and y_new < o_y2 and y_new + (e.position.h)> o_y1 then
-     xhit = true
-     yhit = true
-
-     if e:has('collision') then
-      add(e.collision.collidedwith,o)
+     if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
+      e.position.angle = 0
+     elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+      e.position.angle = 45
+     elseif not e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
+      e.position.angle = 90
+     elseif not e.intention.u and e.intention.d and not e.intention.l and e.intention.r then
+      e.position.angle = 135
+     elseif not e.intention.u and e.intention.d and not e.intention.l and not e.intention.r then
+      e.position.angle = 180
+     elseif not e.intention.u and e.intention.d and e.intention.l and not e.intention.r then
+      e.position.angle = 225
+     elseif not e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+      e.position.angle = 270
+     elseif e.intention.u and not e.intention.d and e.intention.l and not e.intention.r then
+      e.position.angle = 315
      end
-     if o:has('collision') then
-      add(o.collision.collidedwith,e)
+
+    end
+
+    if (e.position.angle > 0 and e.position.angle < 180) then
+     x_new += e.position.velocity
+    end
+    if (e.position.angle > 180 and e.position.angle < 360) then
+     x_new -= e.position.velocity
+    end
+    if (e.position.angle > 270 or e.position.angle < 90) then
+     y_new -= e.position.velocity
+    end
+    if (e.position.angle < 270 and e.position.angle > 90) then
+     y_new += e.position.velocity
+    end
+
+    if e:has('intention') then
+     -- reset player intention
+     e.intention.u = false
+     e.intention.d = false
+     e.intention.l = false
+     e.intention.r = false
+    end
+
+    -- map hittest
+
+    local xhit, x1, y1, x2, y2, a, xb, xc, xd
+    repeat
+     xhit = false
+
+     x1=x_new/8
+     y1=e.position.y/8
+     x2=(x_new+(e.position.w-1))/8
+     y2=(e.position.y+(e.position.h-1))/8
+     xa=fget(mget(x1,y1),0) and not (e.player == false and fget(mget(x1,y1),1))
+     xb=fget(mget(x1,y2),0) and not (e.player == false and fget(mget(x1,y2),1))
+     xc=fget(mget(x2,y2),0) and not (e.player == false and fget(mget(x2,y2),1))
+     xd=fget(mget(x2,y1),0) and not (e.player == false and fget(mget(x2,y1),1))
+     if xa or xb or xc or xd then
+      xhit = true
+      if e.position.angle > 0 and e.position.angle < 180 then
+       x_new -= 1
+      else
+       x_new += 1
+      end
+     end
+    until(xhit==false or (x_new == e.position.x))
+
+    local yhit
+    local ya
+    local yb
+    local yc
+    local yd
+    repeat
+     yhit = false
+
+     x1=e.position.x/8
+     y1=y_new/8
+     x2=(e.position.x+(e.position.w-1))/8
+     y2=(y_new+(e.position.h-1))/8
+     ya=fget(mget(x1,y1),0) and not (e.player == false and fget(mget(x1,y1),1))
+     yb=fget(mget(x1,y2),0) and not (e.player == false and fget(mget(x1,y2),1))
+     yc=fget(mget(x2,y2),0) and not (e.player == false and fget(mget(x2,y2),1))
+     yd=fget(mget(x2,y1),0) and not (e.player == false and fget(mget(x2,y1),1))
+
+     if ya or yb or yc or yd then
+      yhit = true
+      if e.position.angle > 90 and e.position.angle < 270 then
+       y_new -= 1
+      else
+       y_new += 1
+      end
+     end
+    until(yhit==false or (y_new == e.position.y))
+
+    if (yhit or xhit) and e:has('collision') then
+     if e.collision.isdestroyed then
+      e.del = true
      end
     end
 
-   end
-  end
+    -- other entity hittest
+    for o in all(w) do
+     if o ~= e and o:has('position') then
+      local o_x1=o.position.x
+      local o_y1=o.position.y
+      local o_x2=(o.position.x+(o.position.w))
+      local o_y2=(o.position.y+(o.position.h))
+      if x_new < o_x2 and x_new + (e.position.w) > o_x1 and y_new < o_y2 and y_new + (e.position.h)> o_y1 then
+       xhit = true
+       yhit = true
 
-  if e:has('collision') then
-   if e.collision.collisiondamage > 0 and e.position.velocity > 0 then
-    addpart(e.position.x+(flr(e.position.w/2)),e.position.y+(flr(e.position.h/2)),0,0,1,1,5)
-   end
-  end
+       if e:has('collision') then
+        add(e.collision.collidedwith,o)
+       end
+       if o:has('collision') then
+        add(o.collision.collidedwith,e)
+       end
+      end
 
-  -- update position
-  if xhit == false then
-   e.position.x = x_new
-  end
-  if yhit == false then
-   e.position.y = y_new
-  end
+     end
+    end
+
+    if e:has('collision') then
+     if e.collision.collisiondamage > 0 and e.position.velocity > 0 then
+      addpart(e.position.x+(flr(e.position.w/2)),e.position.y+(flr(e.position.h/2)),0,0,1,1,5)
+     end
+    end
+
+    -- update position
+    if xhit == false then
+     e.position.x = x_new
+    end
+    if yhit == false then
+     e.position.y = y_new
+    end
+
   end
  end
 end
 
------------------
 -- control system
------------------
-
 controlsystem = {}
 controlsystem.__index = controlsystem
 
 function controlsystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, controlsystem)
-    return this
+ setmetatable(this, controlsystem)
+ return this
 end
 
 function controlsystem:update(w)
@@ -694,19 +618,16 @@ function controlsystem:update(w)
  end
 end
 
------------------
 -- battle system
------------------
-
 battlesystem = {}
 battlesystem.__index = battlesystem
 
 function battlesystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, battlesystem)
-    return this
+ setmetatable(this, battlesystem)
+ return this
 end
 
 function battlesystem:update(w)
@@ -726,19 +647,16 @@ function battlesystem:update(w)
  end
 end
 
------------------
 -- weapon system
------------------
-
 weaponsystem = {}
 weaponsystem.__index = weaponsystem
 
 function weaponsystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, weaponsystem)
-    return this
+ setmetatable(this, weaponsystem)
+ return this
 end
 
 function weaponsystem:update(w)
@@ -757,7 +675,7 @@ function weaponsystem:update(w)
 
      local xpos = 0
      local ypos = 0
-     -- don't need these if not having firing particles
+
      local x1=0
      local y1=0
 
@@ -768,83 +686,83 @@ function weaponsystem:update(w)
 
      if e.player and e:has('powerup') and e.powerup.type == 5 then
 
-     if e.position.angle == 0 then
-      xpos = e.position.x + e.position.w/2 - 2
-      ypos = e.position.y + e.position.h + speed
-      y1=-1
-     elseif e.position.angle == 45 then
-      xpos = e.position.x - e.position.w/2 - 2
-      ypos = e.position.y + speed + 2
-      x1=1
-      y1=-1
-     elseif e.position.angle == 90 then
-      xpos = e.position.x - e.position.w/2 - speed - 2
-      ypos = e.position.y + e.position.h/2 - 2
-      x1=1
-     elseif e.position.angle == 135 then
-      xpos = e.position.x - e.position.w/2 - speed - 2
-      ypos = e.position.y - e.position.h/2 - speed - 2
-      x1=1
-      y1=1
-     elseif e.position.angle == 180 then
-      xpos = e.position.x + e.position.w/2 -2
-      ypos = e.position.y - e.position.h/2 - speed - 2
-      y1=1
-     elseif e.position.angle == 225 then
-      xpos = e.position.x + e.position.w + 2
-      ypos = e.position.y - speed - 2
-      x1=-1
-      y1=1
-     elseif e.position.angle == 270 then
-      xpos = e.position.x + e.position.w + 2
-      ypos = e.position.y + e.position.h/2 - 2
-      y1=-1
-     elseif e.position.angle == 315 then
-      xpos = e.position.x + e.position.w + 2
-      ypos = e.position.y + e.position.h + 2
-      x1=-1
-      y1=-1
-     end
+      if e.position.angle == 0 then
+       xpos = e.position.x + e.position.w/2 - 2
+       ypos = e.position.y + e.position.h + speed
+       y1=-1
+      elseif e.position.angle == 45 then
+       xpos = e.position.x - e.position.w/2 - 2
+       ypos = e.position.y + speed + 2
+       x1=1
+       y1=-1
+      elseif e.position.angle == 90 then
+       xpos = e.position.x - e.position.w/2 - speed - 2
+       ypos = e.position.y + e.position.h/2 - 2
+       x1=1
+      elseif e.position.angle == 135 then
+       xpos = e.position.x - e.position.w/2 - speed - 2
+       ypos = e.position.y - e.position.h/2 - speed - 2
+       x1=1
+       y1=1
+      elseif e.position.angle == 180 then
+       xpos = e.position.x + e.position.w/2 -2
+       ypos = e.position.y - e.position.h/2 - speed - 2
+       y1=1
+      elseif e.position.angle == 225 then
+       xpos = e.position.x + e.position.w + 2
+       ypos = e.position.y - speed - 2
+       x1=-1
+       y1=1
+      elseif e.position.angle == 270 then
+       xpos = e.position.x + e.position.w + 2
+       ypos = e.position.y + e.position.h/2 - 2
+       y1=-1
+      elseif e.position.angle == 315 then
+       xpos = e.position.x + e.position.w + 2
+       ypos = e.position.y + e.position.h + 2
+       x1=-1
+       y1=-1
+      end
 
      else
 
-     if e.position.angle == 0 then
-      xpos = e.position.x + e.position.w/2 - 1
-      ypos = e.position.y - e.position.h/2 - speed
-      y1=-1
-     elseif e.position.angle == 45 then
-      xpos = e.position.x + e.position.w/2 + speed
-      ypos = e.position.y - e.position.h/2 - speed
-      y1=-1
-      x1=1
-     elseif e.position.angle == 90 then
-      xpos = e.position.x + e.position.w + speed
-      ypos = e.position.y + e.position.h/2 - 1
-      x1=1
-     elseif e.position.angle == 135 then
-      xpos = e.position.x + e.position.w + speed
-      ypos = e.position.y + e.position.h/2 + speed
-      y1=1
-      x1=1
-     elseif e.position.angle == 180 then
-      xpos = e.position.x + e.position.w/2 -1
-      ypos = e.position.y + e.position.h + speed
-      y1=1
-     elseif e.position.angle == 225 then
-      xpos = e.position.x - e.position.w/2 - 1
-      ypos = e.position.y + e.position.h/2 + speed
-      y1=1
-      x1=-1
-     elseif e.position.angle == 270 then
-      xpos = e.position.x - e.position.w/2 - speed
-      ypos = e.position.y + e.position.h/2 - 1
-      x1=-1
-     elseif e.position.angle == 315 then
-      xpos = e.position.x - e.position.w/2 - speed
-      ypos = e.position.y - e.position.h/2 - speed
-      y1=-1
-      x1=-1
-     end
+      if e.position.angle == 0 then
+       xpos = e.position.x + e.position.w/2 - 1
+       ypos = e.position.y - e.position.h/2 - speed
+       y1=-1
+      elseif e.position.angle == 45 then
+       xpos = e.position.x + e.position.w/2 + speed
+       ypos = e.position.y - e.position.h/2 - speed
+       y1=-1
+       x1=1
+      elseif e.position.angle == 90 then
+       xpos = e.position.x + e.position.w + speed
+       ypos = e.position.y + e.position.h/2 - 1
+       x1=1
+      elseif e.position.angle == 135 then
+       xpos = e.position.x + e.position.w + speed
+       ypos = e.position.y + e.position.h/2 + speed
+       y1=1
+       x1=1
+      elseif e.position.angle == 180 then
+       xpos = e.position.x + e.position.w/2 -1
+       ypos = e.position.y + e.position.h + speed
+       y1=1
+      elseif e.position.angle == 225 then
+       xpos = e.position.x - e.position.w/2 - 1
+       ypos = e.position.y + e.position.h/2 + speed
+       y1=1
+       x1=-1
+      elseif e.position.angle == 270 then
+       xpos = e.position.x - e.position.w/2 - speed
+       ypos = e.position.y + e.position.h/2 - 1
+       x1=-1
+      elseif e.position.angle == 315 then
+       xpos = e.position.x - e.position.w/2 - speed
+       ypos = e.position.y - e.position.h/2 - speed
+       y1=-1
+       x1=-1
+      end
 
      end
 
@@ -882,12 +800,12 @@ function weaponsystem:update(w)
      add(w,entity:create({
       sprite    = sprite:create({ number=spritenumber, spritesinsheet = 1 }),
       position  = position:create({
-         x = xpos, y=ypos,
-         w=size, h=size,
-         angle=e.position.angle,
-         velocity=vel,
-         ranged=r, range=range
-       }),
+       x = xpos, y=ypos,
+       w=size, h=size,
+       angle=e.position.angle,
+       velocity=vel,
+       ranged=r, range=range
+      }),
       collision = collision:create({ isdestroyed=isd, collisiondamage=damage, bouncy=b })
      }))
      sfx(0)
@@ -908,50 +826,44 @@ function weaponsystem:update(w)
  end
 end
 
--------------------
 -- animation system
--------------------
-
 animationsystem = {}
 animationsystem.__index = animationsystem
 
 function animationsystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, animationsystem)
-    return this
+ setmetatable(this, animationsystem)
+ return this
 end
 
 function animationsystem:update(w)
  for e in all(w) do
   if e:has('animation') then
-  if (e.animation.animtype == 'always') or (e.animation.animtype == 'movement_only' and e.position.moving) then
-   e.animation.timeoncurrent += 1
-   if e.animation.timeoncurrent > e.animation.animspeed then
-    e.sprite.currentnumber += e.sprite.spritesinsheet
-    if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * e.animation.frames) then
-     e.sprite.currentnumber = e.sprite.number
+   if (e.animation.animtype == 'always') or (e.animation.animtype == 'movement_only' and e.position.moving) then
+    e.animation.timeoncurrent += 1
+    if e.animation.timeoncurrent > e.animation.animspeed then
+     e.sprite.currentnumber += e.sprite.spritesinsheet
+     if e.sprite.currentnumber >= (e.sprite.number) + (e.sprite.spritesinsheet * e.animation.frames) then
+      e.sprite.currentnumber = e.sprite.number
+     end
+     e.animation.timeoncurrent = 0
     end
-    e.animation.timeoncurrent = 0
    end
-  end
   end
  end
 end
 
--------------------
 -- collision system
--------------------
-
 collisionsystem = {}
 collisionsystem.__index = collisionsystem
 
 function collisionsystem:create(props)
-    local this = {}
-    local props = props or {}
-    setmetatable(this, collisionsystem)
-    return this
+ local this = {}
+ local props = props or {}
+ setmetatable(this, collisionsystem)
+ return this
 end
 
 function collisionsystem:update(w)
@@ -981,7 +893,6 @@ function collisionsystem:update(w)
       c.battle.lives -= 1
       if c.battle.lives < 1 then
        del(w,c)
-       --playersalive -= 1
       else
        local xnew, ynew = findfreeloc(leveldata[level].spawn,w)
        c.position.x = xnew + 1
@@ -1003,87 +914,82 @@ function collisionsystem:update(w)
  end
 end
 
-------------------
 -- graphics system
-------------------
-
 graphicssystem = {}
 graphicssystem.__index = graphicssystem
 
 function graphicssystem:create(props)
-    local this = {}
-    local props = props or {}
+ local this = {}
+ local props = props or {}
 
-    setmetatable(this, graphicssystem)
-    return this
+ setmetatable(this, graphicssystem)
+ return this
 end
 
 function graphicssystem:update(w)
  cls()
  for e in all(w) do
 
- if e:has('camera') then
+  if e:has('camera') then
 
-  rectfill(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,0)
+   rectfill(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,0)
 
-  local map_x = e.camera.x + (e.camera.w*8)/2 - e.position.x - e.position.w/2
-  local map_y = e.camera.y + (e.camera.h*8)/2 - e.position.y - e.position.h/2
+   local map_x = e.camera.x + (e.camera.w*8)/2 - e.position.x - e.position.w/2
+   local map_y = e.camera.y + (e.camera.h*8)/2 - e.position.y - e.position.h/2
 
-  if e.camera.shake then
-   map_x += rnd(4) - 2
-   map_y += rnd(4) - 2
-   e.camera.shakeremaining -= 1
-   if e.camera.shakeremaining < 1 then
-    e.camera.shake = false
-    e.camera.shakeremaining = 6
-   end
-  end
-
-  clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
-  map(0,0,map_x,map_y)
-
-  for o in all(w) do
-   if o:has('position') and o:has('sprite') then
-
-       -- use sprite palette info to recolour sprite
-       recolour(o.sprite.recolour)
-
-       spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
-     end
-     pal()
+   if e.camera.shake then
+    map_x += rnd(4) - 2
+    map_y += rnd(4) - 2
+    e.camera.shakeremaining -= 1
+    if e.camera.shakeremaining < 1 then
+     e.camera.shake = false
+     e.camera.shakeremaining = 6
     end
+   end
 
-    -- black border to hide outside of current map
-    -- top
-    rectfill(e.camera.x,e.camera.y,e.camera.x+e.camera.w*8,(map_y+leveldata[level].map_topy*8)-1,leveldata[level].map_colour)
-    -- bottom
-    rectfill(e.camera.x,e.camera.y+e.camera.h*8,e.camera.x+e.camera.w*8,map_y+(leveldata[level].map_topy+(leveldata[level].map_height*8)),leveldata[level].map_colour)
-    -- left
-    rectfill(e.camera.x,e.camera.y,((leveldata[level].map_topx*8)+map_x)-1,e.camera.y+(e.camera.h*8),leveldata[level].map_colour)
-    --right
-    rectfill(e.camera.x+e.camera.w*8,e.camera.y,map_x+(((leveldata[level].map_topx*8)+(leveldata[level].map_width*8))),e.camera.y+e.camera.h*8,leveldata[level].map_colour)
+   clip(e.camera.x,e.camera.y,e.camera.w*8,e.camera.h*8)
+   map(0,0,map_x,map_y)
 
-    -- update rain -- where to put this
-    if leveldata[level].rain then
+   for o in all(w) do
+    if o:has('position') and o:has('sprite') then
+     -- use sprite palette info to recolour sprite
+     recolour(o.sprite.recolour)
 
+     spr(o.sprite.currentnumber+( min(o.sprite.spritesinsheet-1, flr(o.position.angle/45))),o.position.x + map_x, o.position.y + map_y)
+    end
+    pal()
+   end
+
+   -- black border to hide outside of current map
+   -- top
+   rectfill(e.camera.x,e.camera.y,e.camera.x+e.camera.w*8,(map_y+leveldata[level].map_topy*8)-1,leveldata[level].map_colour)
+   -- bottom
+   rectfill(e.camera.x,e.camera.y+e.camera.h*8,e.camera.x+e.camera.w*8,map_y+(leveldata[level].map_topy+(leveldata[level].map_height*8)),leveldata[level].map_colour)
+   -- left
+   rectfill(e.camera.x,e.camera.y,((leveldata[level].map_topx*8)+map_x)-1,e.camera.y+(e.camera.h*8),leveldata[level].map_colour)
+   --right
+   rectfill(e.camera.x+e.camera.w*8,e.camera.y,map_x+(((leveldata[level].map_topx*8)+(leveldata[level].map_width*8))),e.camera.y+e.camera.h*8,leveldata[level].map_colour)
+
+   -- update rain -- where to put this
+   if leveldata[level].rain then
     if raindata.timeuntilnextlevel < 1 then
-      local r = flr(rnd(#raindata.rainlist))+1
-      raindata.targetrainlevel = raindata.rainlist[r]
-      raindata.timeuntilnextlevel = flr(rnd(2000))+3000
+     local r = flr(rnd(#raindata.rainlist))+1
+     raindata.targetrainlevel = raindata.rainlist[r]
+     raindata.timeuntilnextlevel = flr(rnd(2000))+3000
 
-      if raindata.targetrainlevel == 0 then
-       music(-1,6000)
-      else
-       music(0,6000)
-      end
+     if raindata.targetrainlevel == 0 then
+      music(-1,6000)
+     else
+      music(0,6000)
+     end
 
     end
     raindata.timeuntilnextlevel -= 1
     if raindata.currentrainlevel < raindata.targetrainlevel then
-      raindata.currentrainlevel += 0.1
+     raindata.currentrainlevel += 0.1
     end
     if raindata.currentrainlevel > raindata.targetrainlevel then
-      raindata.currentrainlevel -= 0.1
+     raindata.currentrainlevel -= 0.1
     end
 
     -- use currentrainlevel below
@@ -1124,98 +1030,93 @@ function graphicssystem:update(w)
     local rydiff = 0
     -- draw rain
     for r in all(e.camera.rainlist) do
-      if e.player then
-       rxdiff = r.px - e.position.x
-       rydiff = r.py - e.position.y
-      else
-       rxdiff = 0
-       rydiff = 0
-      end
-      sspr((13*8)+(4*r.f),6*8,4,15,r.x+rxdiff,r.y+rydiff)
-    end
-    end
-
-    -- draw particles
-    for p in all(partlist) do
-     if p.s > 1 then
-      circfill( map_x + p.x, map_y + p.y, p.s, p.c )
+     if e.player then
+      rxdiff = r.px - e.position.x
+      rydiff = r.py - e.position.y
      else
-      -- draw pixel
-      pset(map_x + p.x, map_y + p.y, p.c)
+      rxdiff = 0
+      rydiff = 0
      end
+     sspr((13*8)+(4*r.f),6*8,4,15,r.x+rxdiff,r.y+rydiff)
     end
+   end
 
-    clip()
+   -- draw particles
+   for p in all(partlist) do
+    if p.s > 1 then
+     circfill( map_x + p.x, map_y + p.y, p.s, p.c )
+    else
+     -- draw pixel
+     pset(map_x + p.x, map_y + p.y, p.c)
+    end
+   end
 
-    -- camera border
-    rect(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,13)
+   clip()
 
-    if e:has('battle') then
-     for hearts=0,e.battle.lives - 1 do
-      if e.camera.x < 64 then
-       spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
-      else
-       spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
-      end
-     end
+   -- camera border
+   rect(e.camera.x,e.camera.y,e.camera.x+(e.camera.w*8)-1,e.camera.y+(e.camera.h*8)-1,13)
 
-     pal(8,5)
-
-     for hearts=e.battle.lives,1 do
-      if e.camera.x < 64 then
-       spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
-      else
-       spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
-      end
-     end
-
-     pal()
-
-     local startx = 0
-     local starty = 0
+   if e:has('battle') then
+    for hearts=0,e.battle.lives - 1 do
      if e.camera.x < 64 then
-      startx = e.camera.x + 1
-      starty = (e.camera.y + e.camera.h*8) - 2
+      spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
      else
-      startx = e.camera.x + (e.camera.w*8) - 3
-      starty = (e.camera.y + e.camera.h*8) - 2
-     end
-     if e.battle.health > 0 then
-      rectfill(startx,starty,startx + 1, starty - (((e.camera.h*8)-3) / 100 * e.battle.health),8)
+      spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
      end
     end
 
-    if e:has('powerup') and e.player then
-     spr(48 + e.powerup.type + (2*e.powerup.type) - e.powerup.type, e.camera.x + e.camera.w*4 - 4 , e.camera.y + e.camera.h*8 - 10)
-    end
+    pal(8,5)
 
-    if e.player and e:has('powerup') and e.powerup.numberleft < 5 then
+    for hearts=e.battle.lives,1 do
      if e.camera.x < 64 then
-      print(e.powerup.numberleft,e.camera.x + e.camera.w*4 + 6 , e.camera.y + e.camera.h*8 - 10 ,5)
+      spr(1,e.camera.x+5+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
      else
-      print(e.powerup.numberleft,e.camera.x + e.camera.w*4 - 6 , e.camera.y + e.camera.h*8 - 10 ,5)
+      spr(1,e.camera.x+(e.camera.w*5)+(10*(hearts)),(e.camera.y*8)+(e.camera.h*8)-10)
      end
     end
 
- end
+    pal()
 
+    local startx = 0
+    local starty = 0
+    if e.camera.x < 64 then
+     startx = e.camera.x + 1
+     starty = (e.camera.y + e.camera.h*8) - 2
+    else
+     startx = e.camera.x + (e.camera.w*8) - 3
+     starty = (e.camera.y + e.camera.h*8) - 2
+    end
+    if e.battle.health > 0 then
+     rectfill(startx,starty,startx + 1, starty - (((e.camera.h*8)-3) / 100 * e.battle.health),8)
+    end
+   end
+
+   if e:has('powerup') and e.player then
+    spr(48 + e.powerup.type + (2*e.powerup.type) - e.powerup.type, e.camera.x + e.camera.w*4 - 4 , e.camera.y + e.camera.h*8 - 10)
+   end
+
+   if e.player and e:has('powerup') and e.powerup.numberleft < 5 then
+    if e.camera.x < 64 then
+     print(e.powerup.numberleft,e.camera.x + e.camera.w*4 + 6 , e.camera.y + e.camera.h*8 - 10 ,5)
+    else
+     print(e.powerup.numberleft,e.camera.x + e.camera.w*4 - 6 , e.camera.y + e.camera.h*8 - 10 ,5)
+    end
+   end
+
+  end
  end
 end
 
------------------
 -- powerup system
------------------
-
 powerupsystem = {}
 powerupsystem.__index = powerupsystem
 
 function powerupsystem:create(props)
-    local this = {}
-    local props = props or {}
-    this.next = props.next or 300
-
-    setmetatable(this, powerupsystem)
-    return this
+ local this = {}
+ local props = props or {}
+ this.next = props.next or 300
+ setmetatable(this, powerupsystem)
+ return this
 end
 
 function powerupsystem:update(w)
@@ -1270,40 +1171,75 @@ function powerupsystem:update(w)
 
 end
 
-------------
--- game loop
-------------
+-->8
+-- rain and particles
 
-function reset_game()
+partlist = {}
 
- p1.camera.h = 8
- p2.camera.h = 8
- p3.camera.h = 8
- p4.camera.h = 8
-
- if (isplaying(1) and (not isplaying(3))) p1.camera.h = 16
- if (isplaying(2) and (not isplaying(4))) p2.camera.h = 16
-
- if isplaying(3) and not isplaying(1) then
-  p3.camera.h = 16
-  p3.camera.y = 0
- end
-
- if isplaying(4) and not isplaying(2) then
-  p4.camera.h = 16
-  p4.camera.y = 0
- end
-
- --reset all players and remove all non-players
- for e in all(world) do
-  if e.player then
-   resetentity(e)
-  else
-   del(world,e)
-  end
- end
-
+function addpart(_x,_y,_dx,_dy,_s,_flare,_decay)
+ local part = {}
+ part.x=_x+flr(rnd(_flare*2))-_flare
+ part.y=_y+flr(rnd(_flare*2))-_flare
+ part.dx=_dx
+ part.dy=_dy
+ part.s=_s
+ part.c=flr(rnd(2))+6
+ part.t=_decay
+ add(partlist,part)
 end
+
+function updatepart()
+ for p in all(partlist) do
+  p.t-=1
+  if p.t < 0 then
+   p.s-=1
+   p.x+=p.dx
+   p.y+=p.dy
+   p.t=3
+  end
+  if (p.s < 1) del(partlist,p)
+  p.t-=1
+ end
+end
+
+raindata = {}
+raindata.targetrainlevel = 0
+raindata.currentrainlevel = 0
+raindata.timeuntilnextlevel = 0
+raindata.rainlist = {60,10,0}
+
+animstate = 0
+
+level = 1
+leveldata = {}
+
+l1            = {}
+l1.name          = "abandoned house"
+l1.colour        = 1
+l1.map_colour    = 6
+l1.map_topx      = 0
+l1.map_topy      = 0
+l1.map_width     = 32
+l1.map_height    = 32
+l1.spawn         = {}
+l1.poweruppos    = {}
+l1.rain          = false
+
+l2            = {}
+l2.name       = "gardens"
+l2.colour     = 7
+l2.map_colour = 3
+l2.map_topx   = 32
+l2.map_topy   = 0
+l2.map_width  = 32
+l2.map_height = 32
+l2.spawn      = {}
+l2.poweruppos = {}
+l2.rain       = true
+
+add(leveldata,l1)
+add(leveldata,l2)
+
 
 -->8
 -- init / update / draw
@@ -1581,7 +1517,6 @@ function _init()
    fadestate.prev = self
    fadestate.next = self.next
    return fadestate
-   --return self.next
   else
    return self
   end
@@ -1599,8 +1534,6 @@ function _init()
     b1tx = false
     b1lx = false
    end
-
-   --if stateman.frame > 5 then
 
    b1tc = btn(4,0)
    b1tx = btn(5,0)
@@ -1652,7 +1585,6 @@ function _init()
    end
    if (btn(5,3) and isplaying(4)) del(world,p4)
 
-  --end
   return self
  end
 
@@ -1729,7 +1661,9 @@ function _init()
 
    if self.timeremaining < 1 then
     self.timeremaining = self.time
-    return self.next
+    fadestate.prev = self
+    fadestate.next = startstate
+    return fadestate
    end
   return self
  end
@@ -2010,4 +1944,3 @@ __music__
 00 45474344
 00 45474344
 00 45474844
-
