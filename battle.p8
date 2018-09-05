@@ -51,6 +51,8 @@ function shuffle(structure)
  return structure
 end
 
+-- allows the use of a single player sprite
+-- for all four players
 function recolour(palette)
  for c=0,15 do
   pal(c,palette[c+1])
@@ -67,11 +69,11 @@ function numberofplayers()
  return n
 end
 
--- returns true is the player number
--- is currently playing a game
-function isplaying(num)
- for e in all(world) do
-  if e.playernum == num then
+-- returns true if an entity
+-- is currently in the world
+function contains(struct,e)
+ for v in all(struct) do
+  if e == v then
    return true
   end
  end
@@ -110,13 +112,13 @@ function reset_game()
  -- update camera sizes dependent on
  -- the number of players
 
- if (isplaying(1) and (not isplaying(3)) and numberofplayers() == 2) p1.camera.h = 16
- if (isplaying(2) and (not isplaying(4)) and numberofplayers() == 2) p2.camera.h = 16
- if isplaying(3) and not isplaying(1) and numberofplayers() == 2 then
+ if (contains(world,p1) and (not contains(world,p3)) and numberofplayers() == 2) p1.camera.h = 16
+ if (contains(world,2) and (not contains(world,p4)) and numberofplayers() == 2) p2.camera.h = 16
+ if contains(world,p3) and not contains(world,p1) and numberofplayers() == 2 then
   p3.camera.h = 16
   p3.camera.y = 0
  end
- if isplaying(4) and not isplaying(2) and numberofplayers() == 2 then
+ if contains(world,p4) and not contains(world,p2) and numberofplayers() == 2 then
   p4.camera.h = 16
   p4.camera.y = 0
  end
@@ -186,7 +188,6 @@ function entity:create(props)
  local props = props or {}
 
  this.player    = props.player or false
- this.playernum = props.playernum or 0
  this.colour    = props.colour or 0
  this.sprite    = props.sprite
  this.animation = props.animation
@@ -577,7 +578,17 @@ function physicssystem:update(w)
 
     if e:has('collision') then
      if e.collision.collisiondamage > 0 and e.position.velocity > 0 then
-      addpart(e.position.x+(flr(e.position.w/2)),e.position.y+(flr(e.position.h/2)),0,0,1,1,5)
+      --addpart(e.position.x+(flr(e.position.w/2)),e.position.y+(flr(e.position.h/2)),0,0,1,1,5)
+       p = particle:create({
+        x=e.position.x+(flr(e.position.w/2)),
+        y=e.position.y+(flr(e.position.h/2)),
+        dx=0,
+        dy=0,
+        s=1,
+        flare=1,
+        decay=5
+       })
+       pl:add(p)
      end
     end
 
@@ -902,7 +913,16 @@ function collisionsystem:update(w)
      end
      local j=0
      while j<4 do
-      addpart(c.position.x+flr(c.position.w/2),c.position.y+flr(c.position.h/2),0,0,4,3,3)
+      p = particle:create({
+       x=c.position.x+flr(c.position.w/2),
+       y=c.position.y+flr(c.position.h/2),
+       dx=0,
+       dy=0,
+       s=4,
+       flare=3,
+       decay=3
+      })
+      pl:add(p)
       j+=1
      end
      sfx(1)
@@ -913,6 +933,8 @@ function collisionsystem:update(w)
   end
  end
 end
+
+
 
 -- graphics system
 graphicssystem = {}
@@ -1042,14 +1064,8 @@ function graphicssystem:update(w)
    end
 
    -- draw particles
-   for p in all(partlist) do
-    if p.s > 1 then
-     circfill( map_x + p.x, map_y + p.y, p.s, p.c )
-    else
-     -- draw pixel
-     pset(map_x + p.x, map_y + p.y, p.c)
-    end
-   end
+   pl:draw(map_x, map_y)
+   pl:update()
 
    clip()
 
@@ -1174,31 +1190,67 @@ end
 -->8
 -- rain and particles
 
-partlist = {}
+particlelist = {}
+particlelist.__index = particlelist
 
-function addpart(_x,_y,_dx,_dy,_s,_flare,_decay)
- local part = {}
- part.x=_x+flr(rnd(_flare*2))-_flare
- part.y=_y+flr(rnd(_flare*2))-_flare
- part.dx=_dx
- part.dy=_dy
- part.s=_s
- part.c=flr(rnd(2))+6
- part.t=_decay
- add(partlist,part)
+function particlelist:create(props)
+ local this = {}
+ local props = props or {}
+ this.pl = {}
+ setmetatable(this, particlelist)
+ return this
 end
 
-function updatepart()
- for p in all(partlist) do
-  p.t-=1
-  if p.t < 0 then
-   p.s-=1
-   p.x+=p.dx
-   p.y+=p.dy
-   p.t=3
-  end
-  if (p.s < 1) del(partlist,p)
-  p.t-=1
+function particlelist:update()
+ for p in all(self.pl) do
+  p:update()
+  if (p.s < 1) del(self.pl,p)
+ end
+end
+
+function particlelist:draw(x,y)
+ for p in all(self.pl) do
+  p:draw(x,y)
+ end
+end
+
+function particlelist:add(p)
+ add(self.pl, p)
+end
+
+particle = {}
+particle.__index = particle
+
+function particle:create(props)
+ local this = {}
+ local props = props or {}
+ this.x=props.x+flr(rnd(props.flare*2))-props.flare
+ this.y=props.y+flr(rnd(props.flare*2))-props.flare
+ this.dx=props.dx
+ this.dy=props.dy
+ this.s=props.s
+ this.c=flr(rnd(2))+6
+ this.t=props.decay
+ setmetatable(this, particle)
+ return this
+end
+
+function particle:update()
+ self.t-=1
+ if self.t < 0 then
+  self.s-=1
+  self.x+=self.dx
+  self.y+=self.dy
+  self.t=3
+ end
+end
+
+function particle:draw(x,y)
+ if self.s > 1 then
+  circfill( x + self.x, y + self.y, self.s, self.c )
+ else
+  -- draw pixel
+  pset(x + self.x, y + self.y, self.c)
  end
 end
 
@@ -1246,6 +1298,8 @@ add(leveldata,l2)
 
 function _init()
 
+ pl = particlelist:create()
+
  -- create systems
  phys = physicssystem:create()
  gs   = graphicssystem:create()
@@ -1278,7 +1332,6 @@ function _init()
  -- create player 1
  p1 = entity:create({
   player    = true,
-  playernum = 1,
   colour = 14,
   sprite    = sprite:create(),
   animation = animation:create(),
@@ -1294,7 +1347,6 @@ function _init()
  -- player 2
  p2 = entity:create({
   player    = true,
-  playernum = 2,
   colour = 15,
   sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
   animation = animation:create(),
@@ -1309,7 +1361,6 @@ function _init()
 
  p3 = entity:create({
   player    = true,
-  playernum = 3,
   colour = 9,
   sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
   animation = animation:create(),
@@ -1324,7 +1375,6 @@ function _init()
 
  p4 = entity:create({
   player    = true,
-  playernum = 4,
   colour = 10,
   sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
   animation = animation:create(),
@@ -1372,7 +1422,7 @@ function _init()
   local ghost = {0,5,2,3,4,5,6,7,7,9,10,11,6,13,14,6}
   local c_char, c_bg, button
   cls(2)
-  if isplaying(1) then
+  if contains(world,p1) then
    c_bg = p1.colour
    c_char = p1.sprite.recolour
    button = 43
@@ -1387,7 +1437,7 @@ function _init()
   pal()
   spr(button,38,52)
 
-  if isplaying(2) then
+  if contains(world,p2) then
    c_bg = p2.colour
    c_char = p2.sprite.recolour
    button = 43
@@ -1402,7 +1452,7 @@ function _init()
   pal()
   spr(button,83,52)
 
-  if isplaying(3) then
+  if contains(world,p3) then
    c_bg = p3.colour
    c_char = p3.sprite.recolour
    button = 43
@@ -1417,7 +1467,7 @@ function _init()
   pal()
   spr(button,38,107)
 
-  if isplaying(4) then
+  if contains(world,p4) then
    c_bg = p4.colour
    c_char = p4.sprite.recolour
    button = 43
@@ -1432,8 +1482,8 @@ function _init()
   pal()
   spr(button,83,107)
 
-  if (isplaying(1) and numberofplayers() > 1) spr(87,115,115)
-  if (not isplaying(1)) spr(86,5,115)
+  if (contains(world,p1) and numberofplayers() > 1) spr(87,115,115)
+  if (not contains(world,p1)) spr(86,5,115)
 
  end
 
@@ -1477,13 +1527,13 @@ function _init()
  gamestate = state:create({})
  function gamestate:draw()
   gs:update(world)
-  updatepart()
  end
 
  winnerstate = state:create({time=180})
  function winnerstate:draw()
   gs:update(world)
 
+  -- jumping sprite
   local offset = stateman.frame % 5
   if offset == 1 and stateman.frame > 30 then
    if animstate == 0 then
@@ -1563,12 +1613,12 @@ function _init()
 
    if not (b1tc == b1lc) then
     if b1tc == true then
-     if ( isplaying(1) and numberofplayers() > 1 ) then
+     if ( contains(world,p1) and numberofplayers() > 1 ) then
       fadestate.prev = self
       fadestate.next = self.next
       return fadestate
      end
-     if (not isplaying(1)) then
+     if (not contains(world,p1)) then
       add(world,p1)
       sfx(6)
      end
@@ -1578,35 +1628,35 @@ function _init()
    if not (b1tx == b1lx) then
     if b1tx == true then
      --ready = false
-     if ( not isplaying(1) ) then
+     if ( not contains(world,p1) ) then
       fadestate.prev = self
       fadestate.next = self.prev
       return fadestate
      end
-     if (isplaying(1)) del(world,p1)
+     if (contains(world,p1)) del(world,p1)
     end
    end
 
    b1lc = b1tc
    b1lx = b1tx
 
-   if (btn(4,1) and isplaying(2) == false) then
+   if (btn(4,1) and contains(world,p2) == false) then
     add(world,p2)
     sfx(6)
    end
-   if (btn(5,1) and isplaying(2)) del(world,p2)
+   if (btn(5,1) and contains(world,p2)) del(world,p2)
 
-   if (btn(4,2) and isplaying(3) == false) then
+   if (btn(4,2) and contains(world,p3) == false) then
     add(world,p3)
     sfx(6)
    end
-   if (btn(5,2) and isplaying(3)) del(world,p3)
+   if (btn(5,2) and contains(world,p3)) del(world,p3)
 
-   if (btn(4,3) and isplaying(4) == false) then
+   if (btn(4,3) and contains(world,p4) == false) then
     add(world,p4)
     sfx(6)
    end
-   if (btn(5,3) and isplaying(4)) del(world,p4)
+   if (btn(5,3) and contains(world,p4)) del(world,p4)
 
   return self
  end
