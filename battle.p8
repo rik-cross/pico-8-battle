@@ -113,7 +113,7 @@ function reset_game()
  -- the number of players
 
  if (contains(world,p1) and (not contains(world,p3)) and numberofplayers() == 2) p1.camera.h = 16
- if (contains(world,2) and (not contains(world,p4)) and numberofplayers() == 2) p2.camera.h = 16
+ if (contains(world,p2) and (not contains(world,p4)) and numberofplayers() == 2) p2.camera.h = 16
  if contains(world,p3) and not contains(world,p1) and numberofplayers() == 2 then
   p3.camera.h = 16
   p3.camera.y = 0
@@ -187,19 +187,20 @@ function entity:create(props)
  local this = {}
  local props = props or {}
 
- this.player    = props.player or false
- this.colour    = props.colour or 0
- this.sprite    = props.sprite
- this.animation = props.animation
- this.position  = props.position
- this.controls  = props.controls
- this.intention = props.intention
- this.camera    = props.camera
- this.battle    = props.battle
- this.weapon    = props.weapon
- this.collision = props.collision
- this.powerup   = props.powerup
- this.del       = false
+ this.player     = props.player or false
+ this.colour     = props.colour or 0
+ this.selectdata = props.selectdata or nil
+ this.sprite     = props.sprite
+ this.animation  = props.animation
+ this.position   = props.position
+ this.controls   = props.controls
+ this.intention  = props.intention
+ this.camera     = props.camera
+ this.battle     = props.battle
+ this.weapon     = props.weapon
+ this.collision  = props.collision
+ this.powerup    = props.powerup
+ this.del        = false
 
  setmetatable(this, entity)
  return this
@@ -433,29 +434,30 @@ function physicssystem:update(w)
     if e:has('intention') then
 
      -- if entity wants to move up
-     if (e.intention.u) then
+     if e.intention.u and not e.intention.d then
       y_new = e.position.y - speed
       e.position.moving = true
      end
 
      -- if entity wants to move down
-     if (e.intention.d) then
+     if e.intention.d and not e.intention.u then
       y_new = e.position.y + speed
       e.position.moving = true
      end
 
      -- if entity wants to move up
-     if (e.intention.l) then
+     if e.intention.l and not e.intention.r then
       x_new = e.position.x - speed
       e.position.moving = true
      end
 
      -- if entity wants to move up
-     if (e.intention.r) then
+     if e.intention.r and not e.intention.l then
       x_new = e.position.x + speed
       e.position.moving = true
      end
 
+     -- calculate angle of movement
      if e.intention.u and not e.intention.d and not e.intention.l and not e.intention.r then
       e.position.angle = 0
      elseif e.intention.u and not e.intention.d and not e.intention.l and e.intention.r then
@@ -476,6 +478,7 @@ function physicssystem:update(w)
 
     end
 
+    -- calculate new position based on velocity
     if (e.position.angle > 0 and e.position.angle < 180) then
      x_new += e.position.velocity
     end
@@ -489,8 +492,8 @@ function physicssystem:update(w)
      y_new += e.position.velocity
     end
 
+    -- reset player intention
     if e:has('intention') then
-     -- reset player intention
      e.intention.u = false
      e.intention.d = false
      e.intention.l = false
@@ -727,7 +730,7 @@ function weaponsystem:update(w)
       elseif e.position.angle == 270 then
        xpos = e.position.x + e.position.w + 2
        ypos = e.position.y + e.position.h/2 - 2
-       y1=-1
+       x1=-1
       elseif e.position.angle == 315 then
        xpos = e.position.x + e.position.w + 2
        ypos = e.position.y + e.position.h + 2
@@ -1331,60 +1334,64 @@ function _init()
 
  -- create player 1
  p1 = entity:create({
-  player    = true,
-  colour = 14,
-  sprite    = sprite:create(),
-  animation = animation:create(),
-  position  = position:create(),
-  controls  = controls:create(),
-  intention = intention:create(),
-  camera    = camera:create(),
-  battle    = battle:create(),
-  weapon    = weapon:create(),
-  collision = collision:create()
+  player     = true,
+  selectdata = {rect_x1=25,rect_y1=10,rect_x2=57,rect_y2=55,spr_x=25,spr_y=15,btn_x=38,btn_y=52},
+  colour     = 14,
+  sprite     = sprite:create(),
+  animation  = animation:create(),
+  position   = position:create(),
+  controls   = controls:create(),
+  intention  = intention:create(),
+  camera     = camera:create(),
+  battle     = battle:create(),
+  weapon     = weapon:create(),
+  collision  = collision:create()
  })
 
  -- player 2
  p2 = entity:create({
-  player    = true,
-  colour = 15,
-  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
-  animation = animation:create(),
-  position  = position:create(),
-  controls  = controls:create({ p = 1 }),
-  intention = intention:create(),
-  camera    = camera:create({ x = 64 }),
-  battle    = battle:create(),
-  weapon    = weapon:create(),
-  collision = collision:create(),
+  player     = true,
+  selectdata = {rect_x1=70,rect_y1=10,rect_x2=102,rect_y2=55,spr_x=70,spr_y=15,btn_x=83,btn_y=52},
+  colour     = 15,
+  sprite     = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation  = animation:create(),
+  position   = position:create(),
+  controls   = controls:create({ p = 1 }),
+  intention  = intention:create(),
+  camera     = camera:create({ x = 64 }),
+  battle     = battle:create(),
+  weapon     = weapon:create(),
+  collision  = collision:create(),
  })
 
  p3 = entity:create({
-  player    = true,
-  colour = 9,
-  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
-  animation = animation:create(),
-  position  = position:create(),
-  controls  = controls:create({ p = 2 }),
-  intention = intention:create(),
-  camera    = camera:create({ y = 64 }),
-  battle    = battle:create(),
-  weapon    = weapon:create(),
-  collision = collision:create(),
+  player     = true,
+  selectdata = {rect_x1=25,rect_y1=65,rect_x2=57,rect_y2=110,spr_x=25,spr_y=70,btn_x=38,btn_y=107},
+  colour     = 9,
+  sprite     = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation  = animation:create(),
+  position   = position:create(),
+  controls   = controls:create({ p = 2 }),
+  intention  = intention:create(),
+  camera     = camera:create({ y = 64 }),
+  battle     = battle:create(),
+  weapon     = weapon:create(),
+  collision  = collision:create(),
  })
 
  p4 = entity:create({
-  player    = true,
-  colour = 10,
-  sprite    = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
-  animation = animation:create(),
-  position  = position:create(),
-  controls  = controls:create({ p = 3 }),
-  intention = intention:create(),
-  camera    = camera:create({ x = 64, y = 64 }),
-  battle    = battle:create(),
-  weapon    = weapon:create(),
-  collision = collision:create(),
+  player     = true,
+  selectdata = {rect_x1=70,rect_y1=65,rect_x2=102,rect_y2=110,spr_x=70,spr_y=70,btn_x=83,btn_y=107},
+  colour     = 10,
+  sprite     = sprite:create({ recolour = {0,5,2,3,4,5,6,7,14,9,10,11,3,13,14,4} }),
+  animation  = animation:create(),
+  position   = position:create(),
+  controls   = controls:create({ p = 3 }),
+  intention  = intention:create(),
+  camera     = camera:create({ x = 64, y = 64 }),
+  battle     = battle:create(),
+  weapon     = weapon:create(),
+  collision  = collision:create(),
  })
 
  -- create state manager
@@ -1419,68 +1426,27 @@ function _init()
 
  playerstate = state:create()
  function playerstate:draw()
+
   local ghost = {0,5,2,3,4,5,6,7,7,9,10,11,6,13,14,6}
   local c_char, c_bg, button
+
   cls(2)
-  if contains(world,p1) then
-   c_bg = p1.colour
-   c_char = p1.sprite.recolour
-   button = 43
-  else
-   c_bg = 0
-   c_char = ghost
-   button = 42
+  for p in all({p1,p2,p3,p4}) do
+   if contains(world,p) then
+    c_bg = p.colour
+    c_char = p.sprite.recolour
+    button = 43
+   else
+    c_bg = 0
+    c_char = ghost
+    button = 42
+   end
+   rectfill(p.selectdata.rect_x1,p.selectdata.rect_y1,p.selectdata.rect_x2,p.selectdata.rect_y2,c_bg)
+   recolour(c_char)
+   sspr(32,32,16,16,p.selectdata.spr_x,p.selectdata.spr_y,32,32)
+   pal()
+   spr(button,p.selectdata.btn_x,p.selectdata.btn_y)
   end
-  rectfill(25,10,57,55,c_bg)
-  recolour(c_char)
-  sspr(32,32,16,16,25,15,32,32)
-  pal()
-  spr(button,38,52)
-
-  if contains(world,p2) then
-   c_bg = p2.colour
-   c_char = p2.sprite.recolour
-   button = 43
-  else
-   c_bg = 0
-   c_char = ghost
-   button = 42
-  end
-  rectfill(70,10,102,55,c_bg)
-  recolour(c_char)
-  sspr(32,32,16,16,70,15,32,32)
-  pal()
-  spr(button,83,52)
-
-  if contains(world,p3) then
-   c_bg = p3.colour
-   c_char = p3.sprite.recolour
-   button = 43
-  else
-   c_bg = 0
-   c_char = ghost
-   button = 42
-  end
-  rectfill(25,65,57,110,c_bg)
-  recolour(c_char)
-  sspr(32,32,16,16,25,70,32,32)
-  pal()
-  spr(button,38,107)
-
-  if contains(world,p4) then
-   c_bg = p4.colour
-   c_char = p4.sprite.recolour
-   button = 43
-  else
-   c_bg = 0
-   c_char = ghost
-   button = 42
-  end
-  rectfill(70,65,102,110,c_bg)
-  recolour(c_char)
-  sspr(32,32,16,16,70,70,32,32)
-  pal()
-  spr(button,83,107)
 
   if (contains(world,p1) and numberofplayers() > 1) spr(87,115,115)
   if (not contains(world,p1)) spr(86,5,115)
@@ -1595,24 +1561,28 @@ function _init()
   end
  end
 
- b1tc = false
- b1lc = false
- b1tx = false
- b1lx = false
- function playerstate:update()
+ -- current and previous button presses
+ -- for detecting a key release
+ -- **put this is controller component?
+ p1_c_this = false
+ p1_c_last = false
+ p1_x_this = false
+ p1_x_last = false
 
+ function playerstate:update()
    if (stateman.frame == 0) then
-    b1tc = false
-    b1lc = false
-    b1tx = false
-    b1lx = false
+    p1_c_this = false
+    p1_c_last = false
+    p1_x_this = false
+    p1_x_last = false
    end
 
-   b1tc = btn(4,0)
-   b1tx = btn(5,0)
+   p1_c_this = btn(4,0)
+   p1_x_this = btn(5,0)
 
-   if not (b1tc == b1lc) then
-    if b1tc == true then
+   -- on button state change
+   if not (p1_c_this == p1_c_last) then
+    if p1_c_this == true then
      if ( contains(world,p1) and numberofplayers() > 1 ) then
       fadestate.prev = self
       fadestate.next = self.next
@@ -1625,9 +1595,9 @@ function _init()
     end
    end
 
-   if not (b1tx == b1lx) then
-    if b1tx == true then
-     --ready = false
+   -- on button stae change
+   if not (p1_x_this == p1_x_last) then
+    if p1_x_this == true then
      if ( not contains(world,p1) ) then
       fadestate.prev = self
       fadestate.next = self.prev
@@ -1637,8 +1607,8 @@ function _init()
     end
    end
 
-   b1lc = b1tc
-   b1lx = b1tx
+   p1_c_last = p1_c_this
+   p1_x_last = p1_x_this
 
    if (btn(4,1) and contains(world,p2) == false) then
     add(world,p2)
@@ -1728,8 +1698,6 @@ function _init()
   -- stop rain sound
   music(-1)
 
-  -- screen shows for
-  -- a specific time
   self.timeremaining -= 1
 
    if self.timeremaining < 1 then
